@@ -134,6 +134,14 @@ Antes había 4 repos separados (uno por persona), todos con código idéntico sa
 - **`.gitignore`:** bloquea basura del sistema (`Thumbs.db`, `.DS_Store`, etc.).
 - **Identidad de git al commitear:** nombre `Noel`, email `JoRuXo@hotmail.com`.
 
+## Importar movimientos desde PDF (automático)
+Alberto puede mandar un PDF de extracto bancario y decir «mételos»: Claude inserta los movimientos **directamente en Supabase, solo en la cuenta de Alberto** (cada usuario tiene sus filas separadas por `user_id`; los amigos no se ven afectados jamás). Reglas:
+- **Antiduplicados obligatorio:** saltar lo que ya exista con misma fecha+importe (comparación directa contra sus filas de `gastos`).
+- **Excluir** movimientos internos: transferencias a su propia cuenta, retrocesiones, anulaciones (netear con su cargo gemelo), traspasos, y Endesa + reembolsos de luz de la familia.
+- **Ingresos** → `kind='ingreso'` (la app los pone en `otros`). Sueldos y transferencias de familia = ingreso.
+- **Categorías:** respetar los criterios habituales de Alberto (algunos son discretos y NO se documentan aquí; ver nota de privacidad). Ante una categoría dudosa, dejarla en `sin_clasificar` o preguntar.
+- Al terminar, dar un resumen de lo insertado y avisar de los apuntes dudosos para que Alberto los confirme.
+
 ## Cómo desplegar cambios
 1. Editar `index.html` (y `sw.js` si se sube versión de caché).
 2. Commit y push a la rama `main` del repo `gastos`.
@@ -142,7 +150,7 @@ Antes había 4 repos separados (uno por persona), todos con código idéntico sa
 
 ## Cómo trabajar conmigo en este proyecto (reglas permanentes)
 - **Antes de hacer `commit` o `push`, enséñame siempre el `git diff`** y espera mi confirmación. No subas nada a GitHub sin que yo lo haya visto y dicho que sí.
-- **Nunca toques Supabase directamente** (no ejecutes SQL, no crees/borres usuarios, no cambies tablas) salvo que te lo pida explícitamente en ese momento.
+- **Supabase directo:** por defecto no ejecutes SQL ni cambies tablas/usuarios por tu cuenta. **Excepción autorizada (3 jul 2026):** importar movimientos desde un PDF de extracto a la cuenta de Alberto cuando él mande el PDF y diga «mételos» (ver sección «Importar movimientos desde PDF»). Cualquier otra operación en Supabase, solo si la pide explícitamente en el momento.
 - **Nunca cambies** los IDs de categoría, el `SUPABASE_URL`/`SUPABASE_KEY`, ni el modelo de IA fijo, sin confirmación explícita.
 - Si algo te parece arriesgado o ambiguo, pregúntame antes de actuar, no asumas.
 - **Mantén este `CLAUDE.md` siempre al día.** Cada vez que tomemos una decisión, cambie cómo quiero las cosas, te cuente una idea, o hagamos una mejora/limpieza relevante, **actualiza este fichero** (la sección que corresponda y el "Historial de decisiones") para que el proyecto tenga memoria escrita de todo. No hace falta que me lo preguntes cada vez: hazlo como parte natural del trabajo y, al final, súbelo cuando yo confirme.
