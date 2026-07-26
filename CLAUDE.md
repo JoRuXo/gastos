@@ -165,7 +165,7 @@ Resumen · Movimientos · Calendario · Evolución · Deudas
 - **Resumen:** donut + desglose por categoría (solo gastos, no ingresos).
 - **Movimientos:** lista cronológica, con botón de borrado rápido por fila y **buscador**. Con el buscador vacío se ve el mes que estás viendo; en cuanto escribes algo busca en **todos los meses** (por concepto, categoría, cuenta e importe, ignorando acentos: "cafe" encuentra "café"). Al escribir solo se repinta la lista, no la caja, para no perder el foco.
 - **Calendario:** cuadrícula del mes con gasto (rojo) e ingreso (verde) bajo cada día; tocar un día abre el detalle.
-- **Evolución:** comparación mes a mes. Si el usuario ha configurado una *etapa* en su perfil (nombre + fecha de inicio), separa lo de antes y lo de después; si no la ha configurado, muestra simplemente todos los meses seguidos. **Ya no hay fechas ni ciudades fijas en el código** (antes había una constante con la fecha de mudanza de Alberto, y sus amigos veían textos que no iban con ellos).
+- **Evolución:** comparación mes a mes, más una tarjeta de **tendencia por categoría** (selector + barras por mes, media y comparación con el mes anterior). Al cambiar de categoría solo se repinta el gráfico. Si el usuario ha configurado una *etapa* en su perfil (nombre + fecha de inicio), separa lo de antes y lo de después; si no la ha configurado, muestra simplemente todos los meses seguidos. **Ya no hay fechas ni ciudades fijas en el código** (antes había una constante con la fecha de mudanza de Alberto, y sus amigos veían textos que no iban con ellos).
 - **Deudas:** balance de lo que le deben y lo que debe, con botón de liquidar (✓) sin borrar el histórico.
 
 ### Escaneo de tickets/PDF — ELIMINADO (26 jul 2026)
@@ -184,7 +184,7 @@ El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v15`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v16`**.
 - **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
 - **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
@@ -304,4 +304,14 @@ Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue 
 
 **Qué NO se hizo, y por qué:** estaba apuntado «cargar los movimientos por rango de fechas» como mejora de rendimiento. Se descartó porque **rompería el buscador**, que necesita todos los meses en memoria para buscar en el histórico. Con 338 apuntes sobra de largo; retomarlo solo si algún día son muchos miles, y entonces habrá que rediseñar la búsqueda para que consulte a Supabase.
 
-**Ideas para más adelante:** recordatorio de cuotas próximas · gráfico de tendencia por categoría · reordenar categorías (la columna `orden` ya está en la tabla) · adjuntar foto del ticket a un movimiento.
+#### Fase 4 de mejoras (26 jul 2026) — caché `v16`
+- **Aviso de cuotas próximas.** En la tarjeta de gastos fijos, las pendientes se ordenan por proximidad y las que caen en 7 días llevan una pastilla («hoy», «mañana», «en 3 días»), con un resumen de cuánto suman. `diasHastaCuota()` devuelve `null` si estás mirando un mes que no es el actual, porque ahí un «en 3 días» no significaría nada; y ajusta el día 31 en meses de 30.
+  ⚠️ Es un aviso **dentro de la app**, no una notificación del móvil. Para eso harían falta Web Push, claves VAPID y un servidor que las envíe (una Edge Function con cron). Se puede hacer, pero es otro proyecto.
+- **Tendencia por categoría** en Evolución.
+- **Reordenar categorías** con botones ▲▼ (no arrastrar: en móvil es mucho más fiable). Usa la columna `orden`, que ya existía sin usar. Al mover se reasigna el orden a todas y se guardan solo las que cambian; si falla el guardado, se revierte.
+- **Corrección de contraste.** Se midieron los colores de texto y dos no llegaban al mínimo legible (4,5:1):
+  - El ámbar de las pastillas y de los presupuestos al 80% daba 3,1:1 sobre blanco → se oscureció a `#B45309` (5,0:1).
+  - El gris `--faint` daba 2,5:1 en claro y 3,8:1 en oscuro. En oscuro se subió a `#8A929E` (5,6:1, pasa). En claro se subió de `#9CA3AF` a `#767E8A` (2,5 → 4,1:1): **no llega al 4,5 a propósito**, porque para lograrlo habría que dejarlo igual que `--muted` y se perdería un nivel de la jerarquía visual. Si algún día se prioriza la accesibilidad estricta sobre el diseño, el valor sería `#6D7581`.
+- Se corrigió que la pestaña **Evolución** seguía contando los movimientos reembolsables, que sí se excluían en el resto de la app.
+
+**Ideas para más adelante:** adjuntar foto del ticket a un movimiento (Alberto lo dejó aparcado el 26 jul 2026) · notificaciones reales al móvil con Web Push.

@@ -33,7 +33,11 @@
   --surface: #FFFFFF;
   --ink: #111827;
   --muted: #6B7280;
-  --faint: #9CA3AF;
+  /* Gris de los textos de ayuda. Se oscureció (era #9CA3AF) porque daba 2,5:1
+     de contraste sobre blanco y apenas se leía al sol. Ahora da 4,1:1. Llegar
+     al 4,5:1 recomendado obligaría a dejarlo igual que --muted y se perdería
+     el nivel de jerarquía. */
+  --faint: #767E8A;
   --line: #E5E7EB;
   --primary: #4F46E5;
   --primary-d: #4338CA;
@@ -58,7 +62,9 @@
   --expense-bg: #FEF2F2;
   --danger-border: #F5C9C9;
   --warn-soft: #FFFBF6;
-  --warn-ink: #D97706;
+  /* Ámbar oscurecido a propósito: el #D97706 de antes solo daba 3,1:1 de
+     contraste sobre blanco, por debajo del mínimo legible. Este da 5,0:1. */
+  --warn-ink: #B45309;
   --radius: 20px;
   --radius-sm: 14px;
   --shadow: 0 4px 20px rgba(0,0,0,.07);
@@ -82,7 +88,7 @@
   --ink: #E8EAED;
   --ink-2: #C3C7CE;
   --muted: #9BA1AC;
-  --faint: #6F7681;
+  --faint: #8A929E;
   --line: #2A2F38;
   --primary: #8B85F0;
   --primary-d: #6F67E8;
@@ -118,7 +124,7 @@
   --ink: #E8EAED;
   --ink-2: #C3C7CE;
   --muted: #9BA1AC;
-  --faint: #6F7681;
+  --faint: #8A929E;
   --line: #2A2F38;
   --primary: #8B85F0;
   --primary-d: #6F67E8;
@@ -375,6 +381,20 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
 }
 .color-chip.on { border-color: var(--ink); transform: scale(1.06); }
+.pill-pronto {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+  background: var(--warn-soft); color: var(--warn-ink);
+  border-radius: 7px; padding: 3px 7px; flex-shrink: 0;
+}
+.pill-pronto.urgente { background: var(--expense-soft); color: var(--expense-ink); }
+.orden-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin-right: 2px; }
+.orden-btn {
+  width: 26px; height: 19px; padding: 0; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg3); color: var(--muted);
+  border-radius: 6px; font-size: 9px; line-height: 1;
+}
+.orden-btn:active { background: var(--bg2); }
+.orden-btn:disabled { opacity: .3; cursor: default; }
 .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .cat-chip {
   display: flex; align-items: center; gap: 8px; padding: 10px 11px; border-radius: 12px;
@@ -719,6 +739,14 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         propia: true
       });
     });
+    // Orden: el que haya fijado el usuario; si no lo ha tocado, el de serie
+    // (y las que ha creado él, al final).
+    lista.forEach(function (c, i) {
+      var p = catsPersonal[c.id] || {};
+      c.orden = (p.orden != null) ? p.orden : i;
+    });
+    lista.sort(function (a, b) { return a.orden - b.orden; });
+
     CATS = lista;
     CAT_MAP = {};
     CATS.forEach(function (c) { CAT_MAP[c.id] = c; });
@@ -750,6 +778,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
   var formCuenta = "";
   var cuentaLote = "";     // cuenta elegida al pegar un extracto entero
   var busqueda = "";       // texto del buscador de Movimientos
+  var catTendencia = "";   // categoría elegida en el gráfico de tendencia
   var openCats = {};
 
   // ---------- Helpers ----------
@@ -1136,7 +1165,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         if (res.error) return fallo("loadCategorias", res.error);
         catsPersonal = {};
         (res.data || []).forEach(function (r) {
-          catsPersonal[r.cat_id] = { label: r.label, emoji: r.emoji, color: r.color, oculta: !!r.oculta, propia: !!r.propia };
+          catsPersonal[r.cat_id] = { label: r.label, emoji: r.emoji, color: r.color,
+                                     oculta: !!r.oculta, propia: !!r.propia, orden: r.orden };
         });
         recalcularCategorias();
         return true;
@@ -1145,7 +1175,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
   function saveCategoria(c) {
     var row = { user_id: currentUser.id, cat_id: c.id, label: c.label || null, emoji: c.emoji || null,
-                color: c.color || null, oculta: !!c.oculta, propia: !!c.propia, updated_at: new Date().toISOString() };
+                color: c.color || null, oculta: !!c.oculta, propia: !!c.propia,
+                orden: (c.orden == null ? null : c.orden), updated_at: new Date().toISOString() };
     return sb.from("categorias").upsert(row).then(function (res) {
       return res.error ? fallo("saveCategoria", res.error) : true;
     }, function (err) { return fallo("saveCategoria", err); });
@@ -1398,6 +1429,98 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
   }
 
+  // Cuánto se gastó cada mes en una categoría concreta
+  function serieMensual(catId, etapa) {
+    var m = {};
+    expenses.filter(esPropio).forEach(function (e) {
+      if (e.kind === "ingreso" || e.categoryId !== catId) return;
+      var f = e.date || "";
+      if (!f || (etapa && f < etapa)) return;
+      var mk = f.slice(0, 7);
+      m[mk] = (m[mk] || 0) + (e.amount || 0);
+    });
+    return m;
+  }
+
+  // Categorías que tienen algún gasto en el periodo que se está mirando
+  function categoriasConGasto(etapa) {
+    var hay = {};
+    expenses.filter(esPropio).forEach(function (e) {
+      if (e.kind === "ingreso") return;
+      var f = e.date || "";
+      if (!f || (etapa && f < etapa)) return;
+      hay[e.categoryId] = true;
+    });
+    return CATS.filter(function (c) { return hay[c.id]; });
+  }
+
+  // Las barras y los números del gráfico. Se saca aparte para poder repintarlo
+  // solo a él al cambiar de categoría, sin reconstruir toda la pestaña.
+  function graficoTendenciaHTML(etapa, claves) {
+    var c = cat(catTendencia);
+    var serie = serieMensual(catTendencia, etapa);
+    var maximo = 0, suma = 0;
+    claves.forEach(function (k) { var v = serie[k] || 0; if (v > maximo) maximo = v; suma += v; });
+    var media = claves.length ? suma / claves.length : 0;
+
+    var ultimo = serie[claves[claves.length - 1]] || 0;
+    var penultimo = claves.length > 1 ? (serie[claves[claves.length - 2]] || 0) : null;
+    var comparacion = "";
+    if (penultimo != null) {
+      if (penultimo === 0 && ultimo === 0) comparacion = "igual que el mes anterior";
+      else if (penultimo === 0) comparacion = "no gastaste nada el mes anterior";
+      else {
+        var pc = Math.round((ultimo - penultimo) / penultimo * 100);
+        if (pc === 0) comparacion = "igual que el mes anterior";
+        else comparacion = '<b style="color:' + (pc > 0 ? "var(--expense)" : "var(--income)") + '">' +
+          (pc > 0 ? "▲ " : "▼ ") + Math.abs(pc) + "%</b> respecto al mes anterior";
+      }
+    }
+
+    var barras = claves.map(function (k) {
+      var v = serie[k] || 0;
+      var pct = maximo > 0 ? (v / maximo * 100) : 0;
+      var nombre = monthName(parseInt(k.slice(5, 7), 10) - 1);
+      var esUltimo = k === claves[claves.length - 1];
+      return '<div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">' +
+        '<span style="width:62px;font-size:11.5px;color:var(--muted);text-transform:capitalize;flex-shrink:0">' + nombre + '</span>' +
+        '<div style="flex:1;height:16px;background:var(--bg2);border-radius:5px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct.toFixed(1) + '%;background:' + c.color + (esUltimo ? '' : ';opacity:.55') + ';border-radius:5px"></div></div>' +
+        '<span style="width:66px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0">' + eurShort(v) + '</span>' +
+        '</div>';
+    }).join("");
+
+    return barras +
+      '<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:12.5px;color:var(--muted);line-height:1.5">' +
+      'Media: <b style="color:var(--ink)">' + eurShort(media) + '</b> al mes' +
+      (comparacion ? ' · ' + comparacion : '') + '</div>';
+  }
+
+  function tarjetaTendencia(etapa, claves) {
+    if (claves.length < 2) return "";              // con un solo mes no hay tendencia
+    var opciones = categoriasConGasto(etapa);
+    if (opciones.length === 0) return "";
+
+    // Por defecto, la categoría en la que más se gasta
+    var valida = opciones.some(function (c) { return c.id === catTendencia; });
+    if (!valida) {
+      var mejor = opciones[0].id, mejorTotal = -1;
+      opciones.forEach(function (c) {
+        var s = serieMensual(c.id, etapa), t = 0;
+        Object.keys(s).forEach(function (k) { t += s[k]; });
+        if (t > mejorTotal) { mejorTotal = t; mejor = c.id; }
+      });
+      catTendencia = mejor;
+    }
+
+    return '<div class="card"><h3>📈 Tendencia por categoría</h3>' +
+      '<select id="tendCat" class="txt-input" style="margin-bottom:14px">' +
+      opciones.map(function (c) {
+        return '<option value="' + c.id + '"' + (c.id === catTendencia ? " selected" : "") + '>' + c.emoji + " " + esc(c.label) + '</option>';
+      }).join("") + '</select>' +
+      '<div id="tendGrafico">' + graficoTendenciaHTML(etapa, claves) + '</div></div>';
+  }
+
   function renderEvolucion() {
     var content = document.getElementById("content");
     var etapa = perfil.etapaInicio || null;
@@ -1405,7 +1528,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     // Separar en dos etapas por fecha exacta (solo si hay etapa configurada)
     var antes = { ingresos: 0, gastos: 0, n: 0 };
     var meses = {};
-    expenses.forEach(function (e) {
+    // Los reembolsables no son dinero propio, así que tampoco cuentan aquí
+    expenses.filter(esPropio).forEach(function (e) {
       var f = e.date || "";
       if (!f) return;
       if (etapa && f < etapa) {
@@ -1479,12 +1603,20 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       html += bloqueTotales("Todo lo registrado", claves.length + (claves.length === 1 ? " mes" : " meses"), totIng, totGas);
     }
     if (claves.length > 0) html += '<div class="card"><h3>Mes a mes</h3>' + barras + '</div>';
+    html += tarjetaTendencia(etapa, claves);
     // Bloque de lo anterior a la etapa, separado y más discreto
     if (etapa && antes.n > 0) {
       var tituloAntes = perfil.etapaNombre ? ("Antes de " + esc(perfil.etapaNombre)) : "Antes de la etapa";
       html += bloqueTotales(tituloAntes, "hasta el " + fechaLarga(diaAnterior(etapa)) + " · " + antes.n + " mov.", antes.ingresos, antes.gastos);
     }
     content.innerHTML = html;
+
+    // Al cambiar de categoría solo se repinta el gráfico, no toda la pestaña
+    var selTend = document.getElementById("tendCat");
+    if (selTend) selTend.addEventListener("change", function () {
+      catTendencia = this.value;
+      document.getElementById("tendGrafico").innerHTML = graficoTendenciaHTML(etapa, claves);
+    });
   }
 
   // ---------- Render: calendario ----------
@@ -1816,11 +1948,31 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         if (Math.abs(delMes[i].amount - f.amount) < 0.005) { mov = delMes[i]; break; }
       }
       if (mov) usados[mov.id] = true;
-      return { fijo: f, cobrado: !!mov };
+      return { fijo: f, cobrado: !!mov, faltan: diasHastaCuota(f.dia) };
     });
     var total = 0, cobrado = 0;
     lista.forEach(function (x) { total += x.fijo.amount; if (x.cobrado) cobrado += x.fijo.amount; });
     return { lista: lista, total: total, cobrado: cobrado, pendiente: total - cobrado };
+  }
+
+  // Días que faltan para que se cobre una cuota. Devuelve null si no tiene día
+  // puesto, si ya pasó, o si estás mirando un mes que no es el actual (ahí un
+  // "en 3 días" no significaría nada).
+  function diasHastaCuota(dia) {
+    if (dia == null) return null;
+    var hoy = new Date();
+    if (viewYear !== hoy.getFullYear() || viewMonth !== hoy.getMonth()) return null;
+    var diasDelMes = new Date(viewYear, viewMonth + 1, 0).getDate();
+    var d = Math.min(dia, diasDelMes);   // si la cuota es el 31 y el mes tiene 30
+    var faltan = d - hoy.getDate();
+    return faltan < 0 ? null : faltan;
+  }
+
+  function textoCuando(faltan) {
+    if (faltan == null) return "";
+    if (faltan === 0) return "hoy";
+    if (faltan === 1) return "mañana";
+    return "en " + faltan + " días";
   }
 
   // Tarjeta que se pinta en Resumen
@@ -1830,17 +1982,42 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var pct = est.total > 0 ? (est.cobrado / est.total * 100) : 0;
     var quedaTrasFijos = sum(monthIngresos()) - sum(monthGastos()) - est.pendiente;
 
-    var pendientes = est.lista.filter(function (x) { return !x.cobrado; });
+    // Las pendientes se ordenan por lo que falta para el cobro: primero las que
+    // están al caer, y al final las que no tienen día puesto.
+    var pendientes = est.lista.filter(function (x) { return !x.cobrado; })
+      .sort(function (a, b) {
+        if (a.faltan == null && b.faltan == null) return 0;
+        if (a.faltan == null) return 1;
+        if (b.faltan == null) return -1;
+        return a.faltan - b.faltan;
+      });
+
+    var prontas = pendientes.filter(function (x) { return x.faltan != null && x.faltan <= 7; });
+    var totalPronto = prontas.reduce(function (a, x) { return a + x.fijo.amount; }, 0);
+
     var listaPend = pendientes.length === 0
       ? '<div style="font-size:12.5px;color:var(--income);margin-top:10px">✓ Ya han pasado todas las cuotas de este mes.</div>'
       : '<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:9px">' +
         pendientes.map(function (x) {
           var c = cat(x.fijo.categoryId);
-          return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px">' +
+          var pronto = x.faltan != null && x.faltan <= 7;
+          var cuando = textoCuando(x.faltan);
+          return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px">' +
             '<span>' + c.emoji + '</span>' +
-            '<span style="flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(x.fijo.concepto || c.label) + (x.fijo.dia ? ' · día ' + x.fijo.dia : '') + '</span>' +
+            '<span style="flex:1;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+            esc(x.fijo.concepto || c.label) + (x.fijo.dia ? ' · día ' + x.fijo.dia : '') + '</span>' +
+            (cuando
+              ? '<span class="pill-pronto' + (x.faltan <= 1 ? ' urgente' : '') + '">' + cuando + '</span>'
+              : '') +
             '<span style="font-weight:600;font-variant-numeric:tabular-nums">' + eur(x.fijo.amount) + '</span></div>';
         }).join("") + '</div>';
+
+    var avisoPronto = prontas.length
+      ? '<div style="margin-top:11px;background:var(--warn-soft);border-radius:12px;padding:10px 12px;font-size:12.5px;color:var(--ink);line-height:1.45">' +
+        '⏰ <b>' + eur(totalPronto) + '</b> en los próximos 7 días' +
+        (prontas.length === 1 ? ' (' + esc(prontas[0].fijo.concepto || cat(prontas[0].fijo.categoryId).label) + ')'
+                              : ' en ' + prontas.length + ' cuotas') + '</div>'
+      : '';
 
     return '<div class="card"><h3>📌 Gastos fijos del mes ' +
       '<span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· previsión</span></h3>' +
@@ -1853,7 +2030,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       (est.pendiente > 0
         ? '<div style="margin-top:11px;font-size:12.5px;color:var(--muted)">Cuando pasen las cuotas que faltan te quedarían <b style="color:' + (quedaTrasFijos < 0 ? "var(--expense)" : "var(--ink)") + '">' + eur(quedaTrasFijos) + '</b></div>'
         : '') +
-      listaPend + '</div>';
+      avisoPronto + listaPend + '</div>';
   }
 
   function openFijosSheet() {
@@ -2117,11 +2294,48 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     return id;
   }
 
+  // Sube o baja una categoría una posición y guarda el nuevo orden.
+  function moverCategoria(catId, direccion) {
+    var i = -1;
+    CATS.forEach(function (c, idx) { if (c.id === catId) i = idx; });
+    var j = i + direccion;
+    if (i < 0 || j < 0 || j >= CATS.length) return;
+
+    var lista = CATS.slice();
+    var tmp = lista[i]; lista[i] = lista[j]; lista[j] = tmp;
+
+    var copiaSeguridad = JSON.parse(JSON.stringify(catsPersonal));
+    var tareas = [];
+    lista.forEach(function (c, idx) {
+      var p = catsPersonal[c.id] || {};
+      if (p.orden === idx) return;                 // ya estaba en su sitio
+      var nuevo = { label: p.label, emoji: p.emoji, color: p.color,
+                    oculta: !!p.oculta, propia: !!p.propia, orden: idx };
+      catsPersonal[c.id] = nuevo;
+      tareas.push(saveCategoria({ id: c.id, label: nuevo.label, emoji: nuevo.emoji, color: nuevo.color,
+                                  oculta: nuevo.oculta, propia: nuevo.propia, orden: idx }));
+    });
+    recalcularCategorias();
+    openCategoriasSheet(); render();
+
+    Promise.all(tareas).then(function (res) {
+      if (res.every(function (r) { return r; })) return;
+      catsPersonal = copiaSeguridad;
+      recalcularCategorias();
+      openCategoriasSheet(); render();
+      avisoFallo("guardar el orden");
+    });
+  }
+
   function openCategoriasSheet() {
     var sheet = document.getElementById("sheet");
-    var filas = CATS.map(function (c) {
+    var filas = CATS.map(function (c, idx) {
       var usos = usosDeCategoria(c.id);
       return '<div class="item" data-cat-id="' + esc(c.id) + '"' + (c.oculta ? ' style="opacity:.45"' : '') + '>' +
+        '<div class="orden-btns">' +
+        '<button class="orden-btn" data-subir="' + esc(c.id) + '"' + (idx === 0 ? ' disabled' : '') + ' aria-label="Subir">▲</button>' +
+        '<button class="orden-btn" data-bajar="' + esc(c.id) + '"' + (idx === CATS.length - 1 ? ' disabled' : '') + ' aria-label="Bajar">▼</button>' +
+        '</div>' +
         '<div class="ico" style="background:' + c.color + '22">' + c.emoji + '</div>' +
         '<div class="mid"><div class="t">' + esc(c.label) + '</div>' +
         '<div class="s">' + (usos ? usos + (usos === 1 ? " movimiento" : " movimientos") : "sin usar") +
@@ -2139,6 +2353,10 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
     document.getElementById("addCatBtn").addEventListener("click", function () { openCategoriaModal(null); });
     document.getElementById("catsList").addEventListener("click", function (ev) {
+      var subir = ev.target.closest("[data-subir]");
+      if (subir) { ev.stopPropagation(); moverCategoria(subir.getAttribute("data-subir"), -1); return; }
+      var bajar = ev.target.closest("[data-bajar]");
+      if (bajar) { ev.stopPropagation(); moverCategoria(bajar.getAttribute("data-bajar"), 1); return; }
       var it = ev.target.closest("[data-cat-id]");
       if (!it) return;
       openCategoriaModal(CAT_MAP[it.getAttribute("data-cat-id")]);
@@ -2213,16 +2431,20 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var id = esNueva ? nuevoIdCategoria(label) : actual.id;
 
       var antes = catsPersonal[id] ? JSON.parse(JSON.stringify(catsPersonal[id])) : null;
+      // Se conserva el orden que tuviera: editar el nombre no debe recolocarla
+      var ordenActual = antes && antes.orden != null ? antes.orden : null;
       catsPersonal[id] = {
         label: label, emoji: emoji, color: colorElegido,
         oculta: ocultaEl ? ocultaEl.checked : false,
-        propia: esNueva ? true : !!actual.propia
+        propia: esNueva ? true : !!actual.propia,
+        orden: ordenActual
       };
       recalcularCategorias();
       openCategoriasSheet(); render();
 
       saveCategoria({ id: id, label: label, emoji: emoji, color: colorElegido,
-                      oculta: ocultaEl ? ocultaEl.checked : false, propia: esNueva ? true : !!actual.propia })
+                      oculta: ocultaEl ? ocultaEl.checked : false, propia: esNueva ? true : !!actual.propia,
+                      orden: ordenActual })
         .then(function (ok) {
           if (ok) { toast(esNueva ? "Categoría creada ✓" : "Categoría actualizada ✓"); return; }
           if (antes) catsPersonal[id] = antes; else delete catsPersonal[id];
