@@ -159,7 +159,7 @@ Se arregla reactivando el proyecto (`restore_project`): es gratis, no se pierde 
 4. Si no se ven los cambios, hacer Ctrl+Shift+R (recarga forzada) — y si persiste, comprobar que se subió también el `sw.js` con la versión de caché incrementada.
 
 ## Cómo trabajar conmigo en este proyecto (reglas permanentes)
-- **Antes de hacer `commit` o `push`, enséñame siempre el `git diff`** y espera mi confirmación. No subas nada a GitHub sin que yo lo haya visto y dicho que sí.
+- **Trabajo en automático (desde 26 jul 2026).** Alberto tiene los permisos en modo automático y no quiere ir autorizando paso a paso: haz los `commit` y `push` sin pedir confirmación. **Pero enséñale siempre después un resumen de lo que cambió** (un `git diff --stat` o las líneas clave); revisar los cambios es lo que ha cazado errores de verdad, como los dos gastos duplicados del 26 jul. **Sigue preguntando antes** de algo irreversible (borrar apuntes, borrar repos) o de cualquier cosa que toque los datos de sus amigos.
 - **Supabase directo:** por defecto no ejecutes SQL ni cambies tablas/usuarios por tu cuenta. **Excepción autorizada (3 jul 2026):** importar movimientos desde un PDF de extracto a la cuenta de Alberto cuando él mande el PDF y diga «mételos» (ver sección «Importar movimientos desde PDF»). Cualquier otra operación en Supabase, solo si la pide explícitamente en el momento.
 - **Nunca cambies** los IDs de categoría, el `SUPABASE_URL`/`SUPABASE_KEY`, ni el modelo de IA fijo, sin confirmación explícita.
 - Si algo te parece arriesgado o ambiguo, pregúntame antes de actuar, no asumas.
