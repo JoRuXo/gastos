@@ -9,6 +9,16 @@
   <meta name="apple-mobile-web-app-title" content="Mis Gastos">
   <meta name="description" content="Control de gastos personales">
   <link rel="manifest" href="manifest.json">
+  <script>
+    // Se aplica el tema guardado ANTES de pintar nada, para que al abrir la app
+    // en modo oscuro no dé un fogonazo blanco.
+    (function () {
+      try {
+        var t = localStorage.getItem("tema");
+        if (t === "oscuro" || t === "claro") document.documentElement.setAttribute("data-tema", t);
+      } catch (e) {}
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <link rel="apple-touch-icon" href="icon-192.png">
   <title>Mis Gastos</title>
@@ -35,13 +45,110 @@
   --expense: #DC2626;
   --expense-soft: #FEE2E2;
   --danger: #DC2626;
+  --bg3: #F9FAFB;
+  --ink-2: #374151;
+  --primary-ink: #3730A3;
+  --primary-tint: #F5F3FF;
+  --primary-border: #E0E7FF;
+  --primary-border-2: #C7D2FE;
+  --income-ink: #15803D;
+  --income-border: #BBF7D0;
+  --expense-ink: #B91C1C;
+  --expense-border: #FECACA;
+  --expense-bg: #FEF2F2;
+  --danger-border: #F5C9C9;
+  --warn-soft: #FFFBF6;
+  --warn-ink: #D97706;
   --radius: 20px;
   --radius-sm: 14px;
   --shadow: 0 4px 20px rgba(0,0,0,.07);
   --shadow-sm: 0 2px 8px rgba(0,0,0,.05);
 }
 
-body { background: #FFFFFF; }
+/* ===================================================================
+   MODO OSCURO
+   Se aplica de dos formas:
+   - Automatico: si el movil o el ordenador estan en oscuro, salvo que el
+     usuario haya elegido claro a mano.
+   - A mano: el usuario elige claro u oscuro en Mi cuenta, y queda guardado
+     en ese dispositivo (data-tema en la etiqueta <html>).
+   =================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+  --bg: #0F1115;
+  --bg2: #191C22;
+  --bg3: #14171C;
+  --surface: #161A20;
+  --ink: #E8EAED;
+  --ink-2: #C3C7CE;
+  --muted: #9BA1AC;
+  --faint: #6F7681;
+  --line: #2A2F38;
+  --primary: #8B85F0;
+  --primary-d: #6F67E8;
+  --primary-soft: #23223A;
+  --primary-ink: #B9B4FF;
+  --primary-tint: #1E1D30;
+  --primary-border: #34325A;
+  --primary-border-2: #423F73;
+  --accent: #8B85F0;
+  --accent-soft: #23223A;
+  --income: #4ADE80;
+  --income-soft: #14301F;
+  --income-ink: #86EFAC;
+  --income-border: #1F5236;
+  --expense: #F87171;
+  --expense-soft: #34181A;
+  --expense-ink: #FCA5A5;
+  --expense-border: #5A2529;
+  --expense-bg: #251416;
+  --danger: #F87171;
+  --danger-border: #5A2529;
+  --warn-soft: #2A2216;
+  --warn-ink: #FBBF24;
+  --shadow: 0 4px 20px rgba(0,0,0,.55);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.45);
+  }
+}
+:root[data-tema="oscuro"] {
+  --bg: #0F1115;
+  --bg2: #191C22;
+  --bg3: #14171C;
+  --surface: #161A20;
+  --ink: #E8EAED;
+  --ink-2: #C3C7CE;
+  --muted: #9BA1AC;
+  --faint: #6F7681;
+  --line: #2A2F38;
+  --primary: #8B85F0;
+  --primary-d: #6F67E8;
+  --primary-soft: #23223A;
+  --primary-ink: #B9B4FF;
+  --primary-tint: #1E1D30;
+  --primary-border: #34325A;
+  --primary-border-2: #423F73;
+  --accent: #8B85F0;
+  --accent-soft: #23223A;
+  --income: #4ADE80;
+  --income-soft: #14301F;
+  --income-ink: #86EFAC;
+  --income-border: #1F5236;
+  --expense: #F87171;
+  --expense-soft: #34181A;
+  --expense-ink: #FCA5A5;
+  --expense-border: #5A2529;
+  --expense-bg: #251416;
+  --danger: #F87171;
+  --danger-border: #5A2529;
+  --warn-soft: #2A2216;
+  --warn-ink: #FBBF24;
+  --shadow: 0 4px 20px rgba(0,0,0,.55);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.45);
+}
+
+
+
+body { background: var(--bg); }
 
 #app {
   font-family: 'Hanken Grotesk', sans-serif;
@@ -49,7 +156,7 @@ body { background: #FFFFFF; }
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  background: #FFFFFF;
+  background: var(--bg);
   padding: 18px 14px 0;
 }
 
@@ -81,43 +188,43 @@ body { background: #FFFFFF; }
 
 /* ---------- Hero card ---------- */
 .hero {
-  background: #FFFFFF;
-  border: 1.5px solid #E5E7EB;
-  border-top: 4px solid #4F46E5;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-top: 4px solid var(--primary);
   border-radius: var(--radius);
   padding: 20px 22px 18px;
-  color: #111827;
+  color: var(--ink);
   box-shadow: var(--shadow);
   position: relative;
   overflow: hidden;
 }
 .hero::after { content: none; }
 .month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.month-nav .label { font-size: 13.5px; font-weight: 600; letter-spacing: .01em; text-transform: capitalize; color: #111827; }
+.month-nav .label { font-size: 13.5px; font-weight: 600; letter-spacing: .01em; text-transform: capitalize; color: var(--ink); }
 .month-nav button {
-  width: 30px; height: 30px; border-radius: 9px; border: 1.5px solid #E5E7EB; cursor: pointer;
-  background: #F9FAFB; color: #374151; font-size: 15px; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 9px; border: 1.5px solid var(--line); cursor: pointer;
+  background: var(--bg3); color: var(--ink-2); font-size: 15px; display: grid; place-items: center;
   transition: .15s; position: relative; z-index: 1; user-select: none; -webkit-user-select: none;
 }
-.month-nav button:active { transform: scale(.9); background: #E5E7EB; }
-.hero .total-lbl { font-size: 11px; color: #6B7280; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+.month-nav button:active { transform: scale(.9); background: var(--line); }
+.hero .total-lbl { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
 .hero .total {
   font-family: 'Fraunces', serif; font-weight: 700; font-size: 44px; line-height: 1.05;
-  margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: #111827;
+  margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--ink);
 }
 .hero .split { display: flex; gap: 10px; margin-top: 16px; }
 .hero .split .pill { flex: 1; border-radius: 12px; padding: 10px 13px; }
-.hero .split .pill:nth-child(1) { background: #DCFCE7; border: 1px solid #BBF7D0; }
-.hero .split .pill:nth-child(2) { background: #FEE2E2; border: 1px solid #FECACA; }
-.hero .split .pill:nth-child(3) { background: #F3F4F6; border: 1px solid #E5E7EB; }
+.hero .split .pill:nth-child(1) { background: var(--income-soft); border: 1px solid var(--income-border); }
+.hero .split .pill:nth-child(2) { background: var(--expense-soft); border: 1px solid var(--expense-border); }
+.hero .split .pill:nth-child(3) { background: var(--bg2); border: 1px solid var(--line); }
 .hero .split .pill .k { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700; }
-.hero .split .pill:nth-child(1) .k { color: #15803D; }
-.hero .split .pill:nth-child(2) .k { color: #B91C1C; }
-.hero .split .pill:nth-child(3) .k { color: #6B7280; }
+.hero .split .pill:nth-child(1) .k { color: var(--income-ink); }
+.hero .split .pill:nth-child(2) .k { color: var(--expense-ink); }
+.hero .split .pill:nth-child(3) .k { color: var(--muted); }
 .hero .split .pill .v { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.hero .split .pill:nth-child(1) .v { color: #16A34A; }
-.hero .split .pill:nth-child(2) .v { color: #DC2626; }
-.hero .split .pill:nth-child(3) .v { color: #374151; }
+.hero .split .pill:nth-child(1) .v { color: var(--income); }
+.hero .split .pill:nth-child(2) .v { color: var(--danger); }
+.hero .split .pill:nth-child(3) .v { color: var(--ink-2); }
 
 /* ---------- Actions ---------- */
 .actions { display: flex; gap: 10px; margin: 14px 0 4px; }
@@ -127,20 +234,20 @@ body { background: #FFFFFF; }
   display: flex; align-items: center; justify-content: center; gap: 8px; transition: .15s;
 }
 .btn:active { transform: scale(.97); }
-.btn-primary { background: #4F46E5; color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.30); }
-.btn-ghost { background: #FFFFFF; color: #111827; border: 1.5px solid #E5E7EB; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.30); }
+.btn-ghost { background: var(--surface); color: var(--ink); border: 1.5px solid var(--line); }
 .btn .ic { font-size: 16px; }
 
 /* ---------- Tabs ---------- */
-.tabs { display: flex; gap: 3px; background: #F3F4F6; border-radius: 13px; padding: 4px; margin: 16px 0 14px; border: 1px solid #E5E7EB; }
+.tabs { display: flex; gap: 3px; background: var(--bg2); border-radius: 13px; padding: 4px; margin: 16px 0 14px; border: 1px solid var(--line); }
 .tabs button {
   flex: 1; border: none; background: transparent; padding: 9px 2px; border-radius: 9px; cursor: pointer;
-  font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 10.5px; color: #6B7280; transition: .18s; white-space: nowrap;
+  font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 10.5px; color: var(--muted); transition: .18s; white-space: nowrap;
 }
-.tabs button.on { background: #FFFFFF; color: #4F46E5; box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid #E0E7FF; }
+.tabs button.on { background: var(--surface); color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.08); border: 1px solid var(--primary-border); }
 
 /* ---------- Cards / sections ---------- */
-.card { background: #FFFFFF; border-radius: var(--radius); border: 1.5px solid #E5E7EB; padding: 18px; margin-bottom: 14px; }
+.card { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--line); padding: 18px; margin-bottom: 14px; }
 .card h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin-bottom: 14px; }
 
 /* Donut */
@@ -180,11 +287,11 @@ body { background: #FFFFFF; }
 .day-group { margin-bottom: 16px; }
 .day-label { font-size: 11.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; margin: 0 4px 8px; }
 .item {
-  display: flex; align-items: center; gap: 12px; background: #FFFFFF;
+  display: flex; align-items: center; gap: 12px; background: var(--surface);
   border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
-  border: 1.5px solid #E5E7EB; transition: .15s;
+  border: 1.5px solid var(--line); transition: .15s;
 }
-.item:active { transform: scale(.99); border-color: #C7D2FE; background: #F5F3FF; }
+.item:active { transform: scale(.99); border-color: var(--primary-border-2); background: var(--primary-tint); }
 .item .ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
 .item .mid { flex: 1; min-width: 0; }
 .item .mid .t { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -228,7 +335,7 @@ body { background: #FFFFFF; }
 .modal-close {
   position: fixed; top: 16px; right: 16px; z-index: 95;
   width: 38px; height: 38px; border-radius: 50%;
-  border: 1.5px solid #E5E7EB; background: #FFFFFF; color: #111827;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
   font-size: 16px; font-weight: 600; cursor: pointer;
   box-shadow: 0 3px 12px rgba(0,0,0,.14);
   display: flex; align-items: center; justify-content: center;
@@ -257,6 +364,17 @@ body { background: #FFFFFF; }
 .btn, .tabs button, .icon-btn, .cat-chip { user-select: none; -webkit-user-select: none; }
 .txt-input:focus, .date-input:focus, .amount-input:focus-within { border-color: var(--primary); }
 select.txt-input { -webkit-appearance: none; appearance: none; background: var(--surface); }
+.check-line {
+  display: flex; align-items: flex-start; gap: 10px;
+  text-transform: none; letter-spacing: 0; font-size: 13.5px; font-weight: 500;
+  color: var(--ink); line-height: 1.4; cursor: pointer;
+}
+.check-line input[type="checkbox"] { width: 19px; height: 19px; flex-shrink: 0; margin-top: 1px; accent-color: var(--primary); }
+.color-chip {
+  height: 34px; border-radius: 10px; border: 2px solid transparent; cursor: pointer; padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+}
+.color-chip.on { border-color: var(--ink); transform: scale(1.06); }
 .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .cat-chip {
   display: flex; align-items: center; gap: 8px; padding: 10px 11px; border-radius: 12px;
@@ -269,17 +387,17 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 .sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
 .sheet-actions .btn { padding: 15px; }
 .save-btn { background: var(--primary); color: #fff; }
-.del-btn { background: var(--accent-soft); color: var(--danger); border: 1px solid #F5C9C9; flex: 0 0 54px; }
+.del-btn { background: var(--accent-soft); color: var(--danger); border: 1px solid var(--danger-border); flex: 0 0 54px; }
 
-.scan-status { display: flex; align-items: center; gap: 12px; background: var(--accent-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; font-size: 13.5px; color: #3730A3; }
+.scan-status { display: flex; align-items: center; gap: 12px; background: var(--accent-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; font-size: 13.5px; color: var(--primary-ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .note-err { color: var(--danger); font-size: 12.5px; }
 
 .spinner-sm { width: 13px; height: 13px; border: 2px solid rgba(79,70,229,.25); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
-.cat-hint { background: var(--accent-soft); border-radius: 12px; padding: 11px 13px; font-size: 12.5px; color: #3730A3; line-height: 1.45; margin-bottom: 12px; }
+.cat-hint { background: var(--accent-soft); border-radius: 12px; padding: 11px 13px; font-size: 12.5px; color: var(--primary-ink); line-height: 1.45; margin-bottom: 12px; }
 
 .rev-row { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; position: relative; }
-.rev-row.unclear { border-color: var(--accent); background: #FFFBF6; }
+.rev-row.unclear { border-color: var(--accent); background: var(--warn-soft); }
 .rev-row.dup { opacity: .55; border-color: var(--line); background: var(--bg2); }
 .rev-row.dup input, .rev-row.dup select { background: var(--bg2) !important; color: var(--muted); }
 .dup-badge { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--line); border-radius: 6px; padding: 2px 8px; margin-bottom: 6px; letter-spacing: .02em; }
@@ -350,7 +468,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 /* ---------- Login screen ---------- */
 #loginScreen, #recoveryScreen {
   position: fixed; inset: 0; z-index: 100;
-  background: #FFFFFF;
+  background: var(--surface);
   display: flex; align-items: center; justify-content: center; padding: 24px;
   overflow-y: auto;
 }
@@ -363,7 +481,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 }
 .login-msg {
   display: none; margin-top: 14px; border-radius: 12px; padding: 11px 13px;
-  background: var(--primary-soft); color: #3730A3; font-size: 12.5px; line-height: 1.45;
+  background: var(--primary-soft); color: var(--primary-ink); font-size: 12.5px; line-height: 1.45;
 }
 .login-box {
   width: 100%; max-width: 360px;
@@ -400,20 +518,21 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 }
 .kind-toggle button.on-gasto { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
 .kind-toggle button.on-ingreso { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+.kind-toggle button.on-sel { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
 
 /* ---------- Calendario ---------- */
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.cal-dow { text-align: center; font-size: 10px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; padding-bottom: 6px; }
-.cal-cell { aspect-ratio: 1 / 1.35; border-radius: 11px; background: #FFFFFF; border: 1.5px solid #E5E7EB; padding: 6px 4px 5px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: .12s; overflow: hidden; }
+.cal-dow { text-align: center; font-size: 10px; font-weight: 700; color: var(--faint); text-transform: uppercase; padding-bottom: 6px; }
+.cal-cell { aspect-ratio: 1 / 1.35; border-radius: 11px; background: var(--surface); border: 1.5px solid var(--line); padding: 6px 4px 5px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: .12s; overflow: hidden; }
 .cal-cell.empty { background: transparent; border: none; cursor: default; }
-.cal-cell.tiene { background: #FEF2F2; border-color: #FECACA; }
+.cal-cell.tiene { background: var(--expense-bg); border-color: var(--expense-border); }
 .cal-cell:not(.empty):active { transform: scale(.94); }
-.cal-cell .cd { font-size: 13px; font-weight: 700; color: #111827; }
+.cal-cell .cd { font-size: 13px; font-weight: 700; color: var(--ink); }
 .cal-cell .nums { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; }
-.cal-cell .cg { font-size: 13px; font-weight: 800; color: #DC2626; line-height: 1.1; }
-.cal-cell .ci { font-size: 12px; font-weight: 800; color: #16A34A; line-height: 1.1; }
-.cal-cell.hoy { outline: 2px solid #4F46E5; outline-offset: -2px; background: #EEF2FF; }
-.del-month-btn { background: none; border: none; color: #DC2626; font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 12px; cursor: pointer; text-decoration: underline; display: block; margin: 14px auto 0; }
+.cal-cell .cg { font-size: 13px; font-weight: 800; color: var(--danger); line-height: 1.1; }
+.cal-cell .ci { font-size: 12px; font-weight: 800; color: var(--income); line-height: 1.1; }
+.cal-cell.hoy { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--primary-soft); }
+.del-month-btn { background: none; border: none; color: var(--danger); font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 12px; cursor: pointer; text-decoration: underline; display: block; margin: 14px auto 0; }
 </style>
 </head>
 <body>
@@ -507,6 +626,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         <button id="pasteBtn" class="foot-link"><span class="ic">📋</span><span>Pegar movimientos</span><span class="ch">›</span></button>
         <button id="fijosBtn" class="foot-link"><span class="ic">📌</span><span>Mis gastos fijos</span><span class="ch">›</span></button>
         <button id="presupBtn" class="foot-link"><span class="ic">🎯</span><span>Presupuestos</span><span class="ch">›</span></button>
+        <button id="catsBtn" class="foot-link"><span class="ic">🏷️</span><span>Categorías</span><span class="ch">›</span></button>
         <button id="exportBtn2" class="foot-link"><span class="ic">⬇️</span><span>Exportar copia (CSV)</span><span class="ch">›</span></button>
         <button id="delMonthBtn" class="foot-link danger"><span class="ic">🗑</span><span>Borrar movimientos del mes</span><span class="ch">›</span></button>
       </div>
@@ -541,7 +661,10 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
   });
   var currentUser = null;
 
-  var CATS = [
+  // Categorías de serie. Los IDs son SAGRADOS: están escritos en los movimientos
+  // guardados, así que no se renombran ni se borran nunca. Lo que el usuario
+  // cambie (nombre, emoji, color, ocultar) se guarda aparte en la tabla `categorias`.
+  var CATS_BASE = [
     { id: "vivienda",      label: "Habitación / Vivienda", emoji: "🏠", color: "#14543C", type: "fija" },
     { id: "suministros",   label: "Suministros y casa",    emoji: "💡", color: "#3A6B5A", type: "fija" },
     { id: "super",         label: "Supermercado",          emoji: "🛒", color: "#D9803B", type: "variable" },
@@ -561,8 +684,54 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     { id: "otros",         label: "Otros / imprevistos",   emoji: "✳️", color: "#9AA0A6", type: "variable" },
     { id: "sin_clasificar",label: "Sin clasificar",        emoji: "🔍", color: "#C98A3C", type: "variable" }
   ];
+  // Personalización de cada usuario: puede renombrar, cambiar emoji y color,
+  // ocultar las que no usa y crear nuevas. Los IDs de arriba NO se tocan nunca
+  // porque están escritos en los movimientos ya guardados.
+  var catsPersonal = {};   // cat_id -> { label, emoji, color, oculta, propia }
+  var CATS = [];           // lista efectiva = las de serie + los cambios del usuario
   var CAT_MAP = {};
-  CATS.forEach(function (c) { CAT_MAP[c.id] = c; });
+
+  function recalcularCategorias() {
+    var lista = CATS_BASE.map(function (c) {
+      var p = catsPersonal[c.id] || {};
+      return {
+        id: c.id,
+        label: p.label || c.label,
+        emoji: p.emoji || c.emoji,
+        color: p.color || c.color,
+        type: c.type,
+        oculta: !!p.oculta,
+        propia: false
+      };
+    });
+    // Las que ha creado el usuario (no están en la lista de serie)
+    Object.keys(catsPersonal).forEach(function (id) {
+      var esDeSerie = CATS_BASE.some(function (c) { return c.id === id; });
+      if (esDeSerie) return;
+      var p = catsPersonal[id];
+      lista.push({
+        id: id,
+        label: p.label || id,
+        emoji: p.emoji || "🏷️",
+        color: p.color || "#9AA0A6",
+        type: "variable",
+        oculta: !!p.oculta,
+        propia: true
+      });
+    });
+    CATS = lista;
+    CAT_MAP = {};
+    CATS.forEach(function (c) { CAT_MAP[c.id] = c; });
+  }
+
+  // Para los selectores: se ocultan las que el usuario ha escondido, pero nunca
+  // la que está seleccionada ahora mismo (si no, al editar un movimiento viejo
+  // se le cambiaría la categoría sin querer).
+  function catsParaElegir(seleccionada) {
+    return CATS.filter(function (c) { return !c.oculta || c.id === seleccionada; });
+  }
+
+  recalcularCategorias();
 
   // ---------- State ----------
   var expenses = [];
@@ -643,6 +812,27 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     });
   }
 
+  // ---------- Tema claro / oscuro ----------
+  // Se guarda en el propio dispositivo (no en Supabase): es normal querer el
+  // móvil en oscuro y el ordenador en claro.
+  function temaGuardado() {
+    try { return localStorage.getItem("tema") || "auto"; } catch (e) { return "auto"; }
+  }
+  function esOscuroAhora(t) {
+    if (t === "oscuro") return true;
+    if (t === "claro") return false;
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function aplicarTema(t) {
+    var raiz = document.documentElement;
+    if (t === "auto") raiz.removeAttribute("data-tema");
+    else raiz.setAttribute("data-tema", t);
+    try { localStorage.setItem("tema", t); } catch (e) {}
+    // La barra de arriba del navegador/móvil va a juego con la app
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", esOscuroAhora(t) ? "#0F1115" : "#4F46E5");
+  }
+
   // ---------- Auth ----------
   function showLogin() { document.getElementById("loginScreen").classList.remove("hidden"); }
   function hideLogin() { document.getElementById("loginScreen").classList.add("hidden"); }
@@ -660,7 +850,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var pass  = passEl.value;
       if (!email || !pass) return;
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-sm" style="border-color:rgba(255,255,255,.3);border-top-color:#fff"></span> Entrando…';
+      btn.innerHTML = '<span class="spinner-sm" style="border-color:rgba(255,255,255,.35);border-top-color:#fff"></span> Entrando…';
       errEl.style.display = "none";
       sb.auth.signInWithPassword({ email: email, password: pass })
         .then(function(res) {
@@ -753,7 +943,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       if (session && session.user) {
         currentUser = session.user;
         hideLogin();
-        Promise.all([loadPerfil(), loadData(), loadDebts(), loadFijos(), loadPresupuestos()]).then(function(r) {
+        Promise.all([loadPerfil(), loadData(), loadDebts(), loadFijos(), loadPresupuestos(), loadCategorias()]).then(function(r) {
           render();
           // Si la carga falla, avisar en vez de mostrar la app vacía como si no
           // hubiera nada guardado.
@@ -765,6 +955,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         debts = [];
         fijos = [];
         presupuestos = {};
+        catsPersonal = {};
+        recalcularCategorias();
         perfil = { ciudad: "", etapaNombre: "", etapaInicio: null, cuentas: [] };
         showLogin();
       }
@@ -786,7 +978,9 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
   // Convierte del formato interno de la app al formato de Supabase
   function filaGasto(exp) {
-    return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind || "gasto", cuenta: exp.cuenta || "" };
+    return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date,
+             kind: exp.kind || "gasto", cuenta: exp.cuenta || "",
+             reembolsable: !!exp.reembolsable, reembolsado: !!exp.reembolsado };
   }
 
   function loadData() {
@@ -795,7 +989,10 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       .then(function(res) {
         if (res.error) return fallo("loadData", res.error);
         expenses = (res.data || []).map(function(r) {
-          return { id: r.id, amount: r.amount, categoryId: r.category_id, note: r.note || "", date: r.date, kind: r.kind || "gasto", cuenta: r.cuenta || "", createdAt: new Date(r.created_at).getTime() };
+          return { id: r.id, amount: r.amount, categoryId: r.category_id, note: r.note || "", date: r.date,
+                   kind: r.kind || "gasto", cuenta: r.cuenta || "",
+                   reembolsable: !!r.reembolsable, reembolsado: !!r.reembolsado,
+                   createdAt: new Date(r.created_at).getTime() };
         });
         return true;
       }, function (err) { return fallo("loadData", err); });
@@ -931,6 +1128,35 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     }, function (err) { return fallo("deleteFijo", err); });
   }
 
+  // ---------- Categorías personalizadas (Supabase) ----------
+  function loadCategorias() {
+    if (!currentUser) return Promise.resolve(true);
+    return sb.from("categorias").select("*")
+      .then(function (res) {
+        if (res.error) return fallo("loadCategorias", res.error);
+        catsPersonal = {};
+        (res.data || []).forEach(function (r) {
+          catsPersonal[r.cat_id] = { label: r.label, emoji: r.emoji, color: r.color, oculta: !!r.oculta, propia: !!r.propia };
+        });
+        recalcularCategorias();
+        return true;
+      }, function (err) { return fallo("loadCategorias", err); });
+  }
+
+  function saveCategoria(c) {
+    var row = { user_id: currentUser.id, cat_id: c.id, label: c.label || null, emoji: c.emoji || null,
+                color: c.color || null, oculta: !!c.oculta, propia: !!c.propia, updated_at: new Date().toISOString() };
+    return sb.from("categorias").upsert(row).then(function (res) {
+      return res.error ? fallo("saveCategoria", res.error) : true;
+    }, function (err) { return fallo("saveCategoria", err); });
+  }
+
+  function deleteCategoria(catId) {
+    return sb.from("categorias").delete().eq("cat_id", catId).then(function (res) {
+      return res.error ? fallo("deleteCategoria", res.error) : true;
+    }, function (err) { return fallo("deleteCategoria", err); });
+  }
+
   // ---------- Presupuestos por categoría (Supabase) ----------
   function loadPresupuestos() {
     if (!currentUser) return Promise.resolve(true);
@@ -961,13 +1187,25 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var key = monthKey(viewYear, viewMonth);
     return expenses.filter(function (e) { return (e.date || "").slice(0, 7) === key; });
   }
-  // Solo los GASTOS del mes (lo que sale) — para el donut y el desglose
+  // Los movimientos marcados como reembolsables no son dinero propio: un gasto
+  // que te devuelven, o el ingreso de esa devolución. No cuentan en los totales
+  // ni en el desglose por categoría (si contaran, inflarían la categoría igual
+  // que pasó con la ITV). Sí siguen apareciendo en la lista y el calendario.
+  function esPropio(e) { return !e.reembolsable; }
+
+  // Solo los GASTOS propios del mes (lo que sale de verdad) — donut y desglose
   function monthGastos() {
-    return monthExpenses().filter(function (e) { return e.kind !== "ingreso"; });
+    return monthExpenses().filter(function (e) { return e.kind !== "ingreso" && esPropio(e); });
   }
-  // Solo los INGRESOS del mes (lo que entra)
+  // Solo los INGRESOS propios del mes (lo que entra de verdad)
   function monthIngresos() {
-    return monthExpenses().filter(function (e) { return e.kind === "ingreso"; });
+    return monthExpenses().filter(function (e) { return e.kind === "ingreso" && esPropio(e); });
+  }
+  // Gastos adelantados que aún no te han devuelto (de cualquier mes)
+  function pendientesDeCobro() {
+    return expenses.filter(function (e) {
+      return e.reembolsable && !e.reembolsado && e.kind !== "ingreso";
+    }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   }
   function sum(arr) { return arr.reduce(function (a, e) { return a + (e.amount || 0); }, 0); }
   function byCategory(arr) {
@@ -1000,7 +1238,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var size = 116, stroke = 18, r = (size - stroke) / 2, c = 2 * Math.PI * r, cx = size / 2;
     var parts = "", offset = 0;
     if (total <= 0) {
-      parts = '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="#E5E7EB" stroke-width="' + stroke + '"/>';
+      parts = '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="currentColor" style="color:var(--line)" stroke-width="' + stroke + '"/>';
     } else {
       segments.forEach(function (s) {
         var frac = s.amount / total;
@@ -1012,8 +1250,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       });
     }
     return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + parts +
-      '<text x="' + cx + '" y="' + (cx - 4) + '" text-anchor="middle" font-family="Fraunces,serif" font-weight="600" font-size="19" fill="#1E231D">' + eurShort(total) + '</text>' +
-      '<text x="' + cx + '" y="' + (cx + 13) + '" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="9.5" fill="#9AA095">este mes</text>' +
+      '<text x="' + cx + '" y="' + (cx - 4) + '" text-anchor="middle" font-family="Fraunces,serif" font-weight="600" font-size="19" style="fill:var(--ink)">' + eurShort(total) + '</text>' +
+      '<text x="' + cx + '" y="' + (cx + 13) + '" text-anchor="middle" font-family="Hanken Grotesk,sans-serif" font-size="9.5" style="fill:var(--faint)">este mes</text>' +
       '</svg>';
   }
 
@@ -1021,10 +1259,10 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
   function renderResumen() {
     var me = monthGastos();
     var content = document.getElementById("content");
-    if (me.length === 0 && monthIngresos().length === 0) { content.innerHTML = emptyState() + tarjetaPresupuestos() + tarjetaFijos(); return; }
+    if (me.length === 0 && monthIngresos().length === 0) { content.innerHTML = emptyState() + tarjetaPendienteCobro() + tarjetaPresupuestos() + tarjetaFijos(); return; }
     if (me.length === 0) {
       content.innerHTML = '<div class="card"><div class="empty"><div class="big">💰</div>' +
-        '<p>Este mes solo hay ingresos, ningún gasto todavía.</p></div></div>' + tarjetaPresupuestos() + tarjetaFijos();
+        '<p>Este mes solo hay ingresos, ningún gasto todavía.</p></div></div>' + tarjetaPendienteCobro() + tarjetaPresupuestos() + tarjetaFijos();
       return;
     }
 
@@ -1064,7 +1302,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       '<div class="card"><h3>¿En qué se va?</h3>' +
       '<div class="donut-wrap">' + donutSVG(cats, total) + '<div class="legend">' + legend + '</div></div></div>' +
       '<div class="card"><h3>Desglose por categoría <span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· toca para ver</span></h3>' + bars + '</div>' +
-      tarjetaPresupuestos() + tarjetaFijos();
+      tarjetaPendienteCobro() + tarjetaPresupuestos() + tarjetaFijos();
   }
 
   // ---------- Render: movimientos ----------
@@ -1116,10 +1354,11 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var ico = esIngreso ? "💰" : c.emoji;
       var icoBg = esIngreso ? "var(--income-soft)" : c.color + "22";
       var sub = (esIngreso ? "Ingreso" : c.label) + (e.cuenta ? " · " + e.cuenta : "");
+      if (e.reembolsable) sub += e.reembolsado ? " · ya devuelto" : " · te lo deben";
       var amtTxt = esIngreso ? ("+" + eur(e.amount)) : eur(e.amount);
-      var amtColor = esIngreso ? ' style="color:var(--income)"' : '';
-      html += '<div class="item" data-id="' + e.id + '">' +
-        '<div class="ico" style="background:' + icoBg + '">' + ico + '</div>' +
+      var amtColor = esIngreso ? ' style="color:var(--income)"' : (e.reembolsable ? ' style="color:var(--faint)"' : '');
+      html += '<div class="item" data-id="' + e.id + '"' + (e.reembolsable ? ' style="border-style:dashed"' : '') + '>' +
+        '<div class="ico" style="background:' + icoBg + (e.reembolsable ? ';opacity:.55' : '') + '">' + ico + '</div>' +
         '<div class="mid"><div class="t">' + esc(e.note || sub) + '</div>' +
         '<div class="s">' + esc(sub) + '</div></div>' +
         '<div class="amt"' + amtColor + '>' + amtTxt + '</div>' +
@@ -1353,11 +1592,11 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var summary =
       '<div class="card"><h3>Balance de deudas</h3>' +
       '<div style="display:flex;gap:10px">' +
-      '<div style="flex:1;background:var(--income-soft);border:1px solid #BBF7D0;border-radius:12px;padding:11px 13px">' +
-      '<div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Te deben</div>' +
+      '<div style="flex:1;background:var(--income-soft);border:1px solid var(--income-border);border-radius:12px;padding:11px 13px">' +
+      '<div style="font-size:10px;color:var(--income-ink);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Te deben</div>' +
       '<div style="font-family:\'Fraunces\',serif;font-size:18px;font-weight:700;color:var(--income)">' + eur(totalTeDeben) + '</div></div>' +
-      '<div style="flex:1;background:var(--expense-soft);border:1px solid #FECACA;border-radius:12px;padding:11px 13px">' +
-      '<div style="font-size:10px;color:#B91C1C;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Debes</div>' +
+      '<div style="flex:1;background:var(--expense-soft);border:1px solid var(--expense-border);border-radius:12px;padding:11px 13px">' +
+      '<div style="font-size:10px;color:var(--expense-ink);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Debes</div>' +
       '<div style="font-family:\'Fraunces\',serif;font-size:18px;font-weight:700;color:var(--expense)">' + eur(totalDebes) + '</div></div>' +
       '</div>' +
       '<div style="margin-top:11px;text-align:center;font-size:12.5px;color:var(--muted)">Balance neto: <b style="color:' + (balance >= 0 ? "var(--income)" : "var(--expense)") + '">' + (balance >= 0 ? "+" : "") + eur(balance) + '</b></div>' +
@@ -1607,8 +1846,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       '<span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· previsión</span></h3>' +
       '<div style="display:flex;gap:10px;margin-bottom:11px">' +
       '<div style="flex:1;background:var(--bg2);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Total</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700">' + eurShort(est.total) + '</div></div>' +
-      '<div style="flex:1;background:var(--income-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Ya pasaron</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--income)">' + eurShort(est.cobrado) + '</div></div>' +
-      '<div style="flex:1;background:var(--expense-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#B91C1C;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Pendiente</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--expense)">' + eurShort(est.pendiente) + '</div></div>' +
+      '<div style="flex:1;background:var(--income-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:var(--income-ink);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Ya pasaron</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--income)">' + eurShort(est.cobrado) + '</div></div>' +
+      '<div style="flex:1;background:var(--expense-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:var(--expense-ink);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Pendiente</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--expense)">' + eurShort(est.pendiente) + '</div></div>' +
       '</div>' +
       '<div class="catbar-track"><div class="catbar-fill" style="width:' + pct.toFixed(1) + '%;background:var(--income)"></div></div>' +
       (est.pendiente > 0
@@ -1731,6 +1970,31 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     setTimeout(function () { var c = document.getElementById("fjConcepto"); if (c && !editando) c.focus(); }, 250);
   }
 
+  // ---------- Pendiente de cobro ----------
+  // Gastos que adelantaste y te tienen que devolver. No cuentan en tus totales,
+  // pero conviene tenerlos a la vista para no olvidarte de cobrarlos.
+  function tarjetaPendienteCobro() {
+    var lista = pendientesDeCobro();
+    if (lista.length === 0) return "";
+    var total = sum(lista);
+
+    var filas = lista.map(function (e) {
+      var c = cat(e.categoryId);
+      return '<div class="item" data-id="' + esc(e.id) + '" style="border-style:dashed">' +
+        '<div class="ico" style="background:' + c.color + '22;opacity:.65">' + c.emoji + '</div>' +
+        '<div class="mid"><div class="t">' + esc(e.note || c.label) + '</div>' +
+        '<div class="s">' + shortDate(e.date) + (e.cuenta ? ' · ' + esc(e.cuenta) : '') + '</div></div>' +
+        '<div class="amt">' + eur(e.amount) + '</div>' +
+        '<button class="debt-settle" data-cobrado-id="' + esc(e.id) + '" title="Marcar como devuelto">✓</button></div>';
+    }).join("");
+
+    return '<div class="card"><h3>💸 Pendiente de cobro ' +
+      '<span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· ' + eur(total) + '</span></h3>' +
+      '<div style="font-size:12.5px;color:var(--muted);margin-bottom:11px">Dinero que adelantaste y te tienen que devolver. No cuenta en tus gastos.</div>' +
+      filas +
+      '<div class="edit-hint" style="margin:10px 0 0">✓ para marcar que ya te lo han devuelto</div></div>';
+  }
+
   // ---------- Presupuestos por categoría ----------
   function gastadoPorCategoria() {
     var m = {};
@@ -1752,7 +2016,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var pct = lim > 0 ? (gas / lim * 100) : 0;
       var pasado = gas > lim;
       if (pasado) nPasados++;
-      var color = pasado ? "var(--expense)" : (pct >= 80 ? "#D97706" : "var(--income)");
+      var color = pasado ? "var(--expense)" : (pct >= 80 ? "var(--warn-ink)" : "var(--income)");
       return { pct: pct, html:
         '<div style="margin-bottom:13px">' +
         '<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:5px">' +
@@ -1778,7 +2042,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var sheet = document.getElementById("sheet");
     var gastado = gastadoPorCategoria();
 
-    var filas = CATS.filter(function (c) { return c.id !== "sin_clasificar"; }).map(function (c) {
+    var filas = catsParaElegir(null).filter(function (c) { return c.id !== "sin_clasificar"; }).map(function (c) {
       var lim = presupuestos[c.id];
       return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">' +
         '<span style="font-size:16px;width:24px;text-align:center;flex-shrink:0">' + c.emoji + '</span>' +
@@ -1803,18 +2067,23 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var antes = {};
       Object.keys(presupuestos).forEach(function (k) { antes[k] = presupuestos[k]; });
 
-      var nuevos = {};
+      var nuevos = {}, mostradas = {};
       Array.prototype.forEach.call(document.querySelectorAll(".presup-in"), function (inp) {
+        var id = inp.getAttribute("data-cat");
+        mostradas[id] = true;
         var v = parseAmount(inp.value);
-        if (!isNaN(v) && v > 0) nuevos[inp.getAttribute("data-cat")] = v;
+        if (!isNaN(v) && v > 0) nuevos[id] = v;
       });
+      // Si una categoría está oculta no sale en esta pantalla; su presupuesto se
+      // conserva tal cual en vez de borrarlo por no aparecer.
+      Object.keys(antes).forEach(function (id) { if (!mostradas[id]) nuevos[id] = antes[id]; });
 
       // Guardar los que cambian y borrar los que se han dejado vacíos
       var tareas = [];
-      CATS.forEach(function (c) {
-        var a = antes[c.id], b = nuevos[c.id];
-        if (b != null && b !== a) tareas.push(savePresupuesto(c.id, b));
-        else if (b == null && a != null) tareas.push(deletePresupuesto(c.id));
+      Object.keys(mostradas).forEach(function (id) {
+        var a = antes[id], b = nuevos[id];
+        if (b != null && b !== a) tareas.push(savePresupuesto(id, b));
+        else if (b == null && a != null) tareas.push(deletePresupuesto(id));
       });
       if (tareas.length === 0) { closeModal(); return; }
 
@@ -1830,6 +2099,142 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     });
   }
 
+  // ---------- Gestionar categorías ----------
+  var COLORES_CAT = ["#14543C","#3A6B5A","#6F9E78","#4E8FA8","#5B6C8F","#4F46E5",
+                     "#8E7CC3","#9B72CF","#C9485B","#B5838D","#D9803B","#E0A93C",
+                     "#C2602F","#7C8079","#9AA0A6","#3F7E7A"];
+
+  function usosDeCategoria(id) {
+    return expenses.filter(function (e) { return e.categoryId === id; }).length;
+  }
+
+  // Crea un id nuevo a partir del nombre, sin acentos ni espacios, y se asegura
+  // de que no choque con ninguno existente.
+  function nuevoIdCategoria(label) {
+    var base = sinAcentos(label).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24) || "categoria";
+    var id = base, n = 2;
+    while (CAT_MAP[id]) { id = base + "_" + n; n++; }
+    return id;
+  }
+
+  function openCategoriasSheet() {
+    var sheet = document.getElementById("sheet");
+    var filas = CATS.map(function (c) {
+      var usos = usosDeCategoria(c.id);
+      return '<div class="item" data-cat-id="' + esc(c.id) + '"' + (c.oculta ? ' style="opacity:.45"' : '') + '>' +
+        '<div class="ico" style="background:' + c.color + '22">' + c.emoji + '</div>' +
+        '<div class="mid"><div class="t">' + esc(c.label) + '</div>' +
+        '<div class="s">' + (usos ? usos + (usos === 1 ? " movimiento" : " movimientos") : "sin usar") +
+        (c.propia ? " · propia" : "") + (c.oculta ? " · oculta" : "") + '</div></div>' +
+        '<span class="chev">›</span></div>';
+    }).join("");
+
+    sheet.innerHTML =
+      '<div class="grab"></div>' +
+      '<h2>Categorías</h2>' +
+      '<div class="cat-hint">Puedes cambiarles el nombre, el emoji y el color, ocultar las que no uses y crear otras nuevas. Ocultar una <b>no borra</b> sus movimientos: solo deja de salir al elegir categoría.</div>' +
+      '<div id="catsList">' + filas + '</div>' +
+      '<div class="sheet-actions"><button class="btn save-btn" id="addCatBtn" style="flex:1">+ Nueva categoría</button></div>';
+    document.getElementById("modal").classList.remove("hidden");
+
+    document.getElementById("addCatBtn").addEventListener("click", function () { openCategoriaModal(null); });
+    document.getElementById("catsList").addEventListener("click", function (ev) {
+      var it = ev.target.closest("[data-cat-id]");
+      if (!it) return;
+      openCategoriaModal(CAT_MAP[it.getAttribute("data-cat-id")]);
+    });
+  }
+
+  function openCategoriaModal(c) {
+    var esNueva = !c;
+    var actual = c || { id: null, label: "", emoji: "🏷️", color: COLORES_CAT[5], oculta: false, propia: true };
+    var usos = esNueva ? 0 : usosDeCategoria(actual.id);
+    var sePuedeBorrar = !esNueva && actual.propia && usos === 0;
+    var sheet = document.getElementById("sheet");
+
+    sheet.innerHTML =
+      '<div class="grab"></div>' +
+      '<h2>' + (esNueva ? "Nueva categoría" : "Editar categoría") + '</h2>' +
+      (!esNueva && !actual.propia
+        ? '<div class="cat-hint">Es una categoría de serie. Puedes cambiarle el nombre, el emoji y el color, u ocultarla, pero no borrarla (sus movimientos guardados dependen de ella).</div>'
+        : '') +
+      '<div class="field"><label>Nombre</label>' +
+      '<input id="ctLabel" class="txt-input" type="text" placeholder="p. ej. Mascota" value="' + esc(actual.label) + '"></div>' +
+      '<div class="field"><label>Emoji</label>' +
+      '<input id="ctEmoji" class="txt-input" type="text" maxlength="4" placeholder="🏷️" value="' + esc(actual.emoji) + '" style="font-size:22px;width:88px;text-align:center"></div>' +
+      '<div class="field"><label>Color</label><div id="ctColores" class="cat-grid" style="grid-template-columns:repeat(8,1fr);gap:7px">' +
+      COLORES_CAT.map(function (col) {
+        return '<button type="button" class="color-chip' + (col.toLowerCase() === String(actual.color).toLowerCase() ? " on" : "") + '" data-color="' + col + '" style="background:' + col + '"></button>';
+      }).join("") + '</div></div>' +
+      (esNueva ? '' :
+        '<div class="field"><label class="check-line">' +
+        '<input id="ctOculta" type="checkbox"' + (actual.oculta ? ' checked' : '') + '>' +
+        '<span>Ocultarla al elegir categoría' + (usos ? ' (sus ' + usos + ' movimientos se conservan)' : '') + '</span></label></div>') +
+      '<div class="sheet-actions">' +
+      '<button class="btn btn-ghost" id="ctBackBtn" style="flex:0 0 54px">‹</button>' +
+      (sePuedeBorrar ? '<button class="btn del-btn" id="ctDelBtn">🗑</button>' : '') +
+      '<button class="btn save-btn" id="ctSaveBtn">Guardar</button>' +
+      '</div>';
+    document.getElementById("modal").classList.remove("hidden");
+
+    var colorElegido = actual.color;
+    document.getElementById("ctColores").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-color]");
+      if (!b) return;
+      colorElegido = b.getAttribute("data-color");
+      Array.prototype.forEach.call(this.querySelectorAll(".color-chip"), function (el) {
+        el.classList.toggle("on", el === b);
+      });
+    });
+
+    document.getElementById("ctBackBtn").addEventListener("click", openCategoriasSheet);
+
+    var delBtn = document.getElementById("ctDelBtn");
+    if (delBtn) delBtn.addEventListener("click", function () {
+      if (!window.confirm("¿Borrar la categoría \"" + actual.label + "\"?")) return;
+      var copia = catsPersonal[actual.id];
+      delete catsPersonal[actual.id];
+      recalcularCategorias();
+      openCategoriasSheet(); render();
+      deleteCategoria(actual.id).then(function (ok) {
+        if (ok) { toast("Categoría borrada"); return; }
+        catsPersonal[actual.id] = copia;
+        recalcularCategorias();
+        openCategoriasSheet(); render();
+        avisoFallo("borrar la categoría");
+      });
+    });
+
+    document.getElementById("ctSaveBtn").addEventListener("click", function () {
+      var label = document.getElementById("ctLabel").value.trim();
+      if (!label) { toast("Ponle un nombre"); document.getElementById("ctLabel").focus(); return; }
+      var emoji = document.getElementById("ctEmoji").value.trim() || "🏷️";
+      var ocultaEl = document.getElementById("ctOculta");
+      var id = esNueva ? nuevoIdCategoria(label) : actual.id;
+
+      var antes = catsPersonal[id] ? JSON.parse(JSON.stringify(catsPersonal[id])) : null;
+      catsPersonal[id] = {
+        label: label, emoji: emoji, color: colorElegido,
+        oculta: ocultaEl ? ocultaEl.checked : false,
+        propia: esNueva ? true : !!actual.propia
+      };
+      recalcularCategorias();
+      openCategoriasSheet(); render();
+
+      saveCategoria({ id: id, label: label, emoji: emoji, color: colorElegido,
+                      oculta: ocultaEl ? ocultaEl.checked : false, propia: esNueva ? true : !!actual.propia })
+        .then(function (ok) {
+          if (ok) { toast(esNueva ? "Categoría creada ✓" : "Categoría actualizada ✓"); return; }
+          if (antes) catsPersonal[id] = antes; else delete catsPersonal[id];
+          recalcularCategorias();
+          openCategoriasSheet(); render();
+          avisoFallo("guardar la categoría");
+        });
+    });
+
+    setTimeout(function () { var l = document.getElementById("ctLabel"); if (l && esNueva) l.focus(); }, 250);
+  }
+
   // ---------- Cuenta / cerrar sesión ----------
   function openAccountSheet() {
     var sheet = document.getElementById("sheet");
@@ -1839,6 +2244,12 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       '<h2>Mi cuenta</h2>' +
       '<div class="field"><label>Sesión iniciada como</label>' +
       '<div class="txt-input" style="background:var(--bg2);color:var(--muted)">' + esc(email) + '</div></div>' +
+
+      '<div class="field"><label>Aspecto <span style="font-weight:400;text-transform:none;letter-spacing:0">(solo en este dispositivo)</span></label>' +
+      '<div class="kind-toggle" id="temaSel">' +
+      [["auto","Automático"],["claro","☀️ Claro"],["oscuro","🌙 Oscuro"]].map(function (t) {
+        return '<button type="button" data-tema="' + t[0] + '" class="' + (temaGuardado() === t[0] ? "on-sel" : "") + '">' + t[1] + '</button>';
+      }).join("") + '</div></div>' +
 
       '<div class="field"><label>Ciudad <span style="font-weight:400;text-transform:none;letter-spacing:0">(sale en la cabecera)</span></label>' +
       '<input id="pCiudad" class="txt-input" type="text" placeholder="p. ej. Aalsmeer" value="' + esc(perfil.ciudad) + '"></div>' +
@@ -1857,6 +2268,16 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       '<div class="sheet-actions"><button class="btn save-btn" id="pSaveBtn" style="flex:1">Guardar ajustes</button></div>' +
       '<div class="sheet-actions"><button class="btn btn-ghost" id="logoutBtn" style="flex:1;color:var(--danger)">Cerrar sesión</button></div>';
     document.getElementById("modal").classList.remove("hidden");
+
+    // El tema se aplica al momento, para verlo mientras eliges
+    document.getElementById("temaSel").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-tema]");
+      if (!b) return;
+      aplicarTema(b.getAttribute("data-tema"));
+      Array.prototype.forEach.call(this.querySelectorAll("[data-tema]"), function (el) {
+        el.className = el === b ? "on-sel" : "";
+      });
+    });
 
     document.getElementById("pSaveBtn").addEventListener("click", function () {
       var btn = this;
@@ -1910,7 +2331,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
   // ---------- Modal ----------
   function catGrid(selected) {
-    return CATS.map(function (c) {
+    return catsParaElegir(selected).map(function (c) {
       return '<button type="button" class="cat-chip' + (c.id === selected ? " on" : "") + '" data-cat="' + c.id + '">' +
         '<span class="e">' + c.emoji + '</span><span class="nm">' + esc(c.label) + '</span></button>';
     }).join("");
@@ -1923,6 +2344,13 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       html += '<option value="' + esc(c) + '"' + (c === selected ? " selected" : "") + '>' + esc(c) + '</option>';
     });
     return html;
+  }
+
+  // El texto de la casilla cambia según sea gasto o ingreso
+  function textoReembolso(kind) {
+    return kind === "ingreso"
+      ? "Es la devolución de un gasto mío (no cuenta como ingreso)"
+      : "Me lo van a devolver (no cuenta en mis gastos)";
   }
 
   function openModal(opts) {
@@ -1956,6 +2384,9 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       ((perfil.cuentas && perfil.cuentas.length)
         ? '<div class="field"><label>Cuenta</label><select id="fCuenta" class="txt-input">' + cuentaOptions(formCuenta) + '</select></div>'
         : '') +
+      '<div class="field"><label class="check-line">' +
+      '<input id="fReemb" type="checkbox"' + (opts.reembolsable ? ' checked' : '') + '>' +
+      '<span id="fReembTxt">' + textoReembolso(formKind) + '</span></label></div>' +
       '<div class="sheet-actions">' +
       (editingId ? '<button class="btn del-btn" id="delBtn">🗑</button>' : "") +
       '<button class="btn save-btn" id="saveBtn">' + (editingId ? "Guardar cambios" : "Guardar") + '</button>' +
@@ -1972,6 +2403,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       this.querySelector('[data-kind="gasto"]').className = ing ? "" : "on-gasto";
       this.querySelector('[data-kind="ingreso"]').className = ing ? "on-ingreso" : "";
       document.getElementById("catField").style.display = ing ? "none" : "";
+      document.getElementById("fReembTxt").textContent = textoReembolso(formKind);
     });
 
     document.getElementById("catGrid").addEventListener("click", function (ev) {
@@ -2015,6 +2447,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var date = document.getElementById("fDate").value || todayISO();
     var selCuenta = document.getElementById("fCuenta");
     var cuenta = selCuenta ? selCuenta.value : formCuenta;
+    var reemb = document.getElementById("fReemb").checked;
     var esIngreso = formKind === "ingreso";
     var catFinal = esIngreso ? "otros" : formCat; // los ingresos no usan categoría de gasto
     var palabra = esIngreso ? "Ingreso" : "Gasto";
@@ -2023,18 +2456,24 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var ex = expenses.find(function (x) { return x.id === editingId; });
       if (ex) {
         // Se guarda el estado anterior para poder deshacerlo si Supabase lo rechaza
-        var antes = { amount: ex.amount, categoryId: ex.categoryId, note: ex.note, date: ex.date, kind: ex.kind, cuenta: ex.cuenta };
+        var antes = { amount: ex.amount, categoryId: ex.categoryId, note: ex.note, date: ex.date, kind: ex.kind,
+                      cuenta: ex.cuenta, reembolsable: ex.reembolsable, reembolsado: ex.reembolsado };
         ex.amount = amt; ex.categoryId = catFinal; ex.note = note; ex.date = date; ex.kind = formKind; ex.cuenta = cuenta;
+        ex.reembolsable = reemb;
+        // Si se desmarca, deja de estar pendiente de cobro
+        if (!reemb) ex.reembolsado = false;
         saveExpense(ex).then(function (ok) {
           if (ok) { toast(palabra + " actualizado ✓"); return; }
           ex.amount = antes.amount; ex.categoryId = antes.categoryId;
           ex.note = antes.note; ex.date = antes.date; ex.kind = antes.kind; ex.cuenta = antes.cuenta;
+          ex.reembolsable = antes.reembolsable; ex.reembolsado = antes.reembolsado;
           render();
           avisoFallo("guardar el cambio");
         });
       }
     } else {
-      var newExp = { id: uid(), amount: amt, categoryId: catFinal, note: note, date: date, kind: formKind, cuenta: cuenta, createdAt: Date.now() };
+      var newExp = { id: uid(), amount: amt, categoryId: catFinal, note: note, date: date, kind: formKind, cuenta: cuenta,
+                     reembolsable: reemb, reembolsado: false, createdAt: Date.now() };
       expenses.push(newExp);
       saveExpense(newExp).then(function (ok) {
         if (ok) { toast(palabra + " guardado ✓"); return; }
@@ -2090,7 +2529,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
   // ---------- Multi-movement review ----------
   function catOptions(selected) {
-    return CATS.map(function (c) {
+    return catsParaElegir(selected).map(function (c) {
       return '<option value="' + c.id + '"' + (c.id === selected ? " selected" : "") + '>' + c.emoji + " " + esc(c.label) + '</option>';
     }).join("");
   }
@@ -2107,7 +2546,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var esIngreso = x.kind === "ingreso";
       var unclear = !isDup && !esIngreso && x.categoryId === "sin_clasificar";
       var cls = isDup ? " dup" : (unclear ? " unclear" : "");
-      return '<div class="rev-row' + cls + '" data-i="' + i + '" data-dup="' + (isDup ? "1" : "0") + '" data-kind="' + (esIngreso ? "ingreso" : "gasto") + '">' +
+      return '<div class="rev-row' + cls + '" data-i="' + i + '" data-dup="' + (isDup ? "1" : "0") + '" data-kind="' + (esIngreso ? "ingreso" : "gasto") + '"' +
+        ' data-cuenta="' + esc(x.cuenta || "") + '" data-reemb="' + (x.reembolsable ? "1" : "0") + '" data-reembdo="' + (x.reembolsado ? "1" : "0") + '">' +
         (isDup
           ? '<div class="dup-badge">✓ ya guardado</div>'
           : (esIngreso
@@ -2213,7 +2653,13 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         id: uid(), amount: amt,
         categoryId: esIngreso ? "otros" : (catSel ? catSel.value : "sin_clasificar"),
         note: row.querySelector('[data-f="note"]').value.trim(),
-        date: dt, kind: esIngreso ? "ingreso" : "gasto", cuenta: cuentaLote, createdAt: Date.now()
+        date: dt, kind: esIngreso ? "ingreso" : "gasto",
+        // Al importar un CSV cada fila trae su cuenta; al pegar un extracto no,
+        // y entonces se usa la que se eligió para todo el lote.
+        cuenta: row.getAttribute("data-cuenta") || cuentaLote,
+        reembolsable: row.getAttribute("data-reemb") === "1",
+        reembolsado: row.getAttribute("data-reembdo") === "1",
+        createdAt: Date.now()
       };
       expenses.push(exp);
       toSave.push(exp);
@@ -2287,7 +2733,12 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
         : '') +
       '<textarea id="pasteArea" class="txt-input" style="min-height:150px;font-family:monospace;font-size:12.5px;resize:vertical" placeholder="2026-06-04;super;23,40;Albert Heijn&#10;2026-06-03;comer;12,50;Bar Lola"></textarea>' +
       '<div id="pasteErr" class="note-err" style="margin-top:8px;display:none">No reconocí ningún gasto. Revisa el texto.</div>' +
-      '<div class="sheet-actions"><button class="btn save-btn" id="procPaste">Procesar</button></div>';
+      '<div class="sheet-actions"><button class="btn save-btn" id="procPaste">Procesar</button></div>' +
+      '<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px">' +
+      '<label class="btn btn-ghost" for="csvInput" style="width:100%"><span class="ic">📄</span> Importar una copia CSV</label>' +
+      '<input type="file" id="csvInput" accept=".csv,text/csv,text/plain" class="visually-hidden">' +
+      '<div style="font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.45;text-align:center">Sube un CSV exportado por la app. Se revisa igual, y lo que ya tengas guardado se marca como duplicado.</div>' +
+      '</div>';
     document.getElementById("modal").classList.remove("hidden");
     document.getElementById("procPaste").addEventListener("click", function () {
       var txt = document.getElementById("pasteArea").value;
@@ -2298,21 +2749,116 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       if (list.length === 1) {
         var x = list[0];
         openModal({ amount: x.amount, date: x.date, note: x.note, categoryId: x.categoryId, kind: x.kind, cuenta: cuentaLote,
-          statusHTML: '<div class="scan-status" style="background:var(--income-soft);color:#15803D"><div>✓ Revisa y guarda.</div></div>' });
+          statusHTML: '<div class="scan-status" style="background:var(--income-soft);color:var(--income-ink)"><div>✓ Revisa y guarda.</div></div>' });
       } else {
         openMultiReview(list);
       }
     });
+    document.getElementById("csvInput").addEventListener("change", function (ev) {
+      var f = ev.target.files && ev.target.files[0];
+      this.value = "";
+      if (!f) return;
+      var lector = new FileReader();
+      lector.onload = function () {
+        var lista;
+        try { lista = importarCSV(String(lector.result)); }
+        catch (err) { console.error("importarCSV", err); lista = []; }
+        if (!lista || lista.length === 0) {
+          var e = document.getElementById("pasteErr");
+          e.textContent = "No pude leer ese fichero. ¿Es un CSV exportado por la app?";
+          e.style.display = "block";
+          return;
+        }
+        cuentaLote = "";        // en un CSV cada fila trae ya su propia cuenta
+        openMultiReview(lista);
+      };
+      lector.onerror = function () { toast("No se pudo leer el fichero"); };
+      lector.readAsText(f, "utf-8");
+    });
+
     setTimeout(function () { var a = document.getElementById("pasteArea"); if (a) a.focus(); }, 250);
+  }
+
+  // ---------- Importar CSV ----------
+  // Lee un CSV exportado por la app (o cualquiera con cabecera parecida) y lo
+  // manda a la misma pantalla de revisión que el pegado, con su antiduplicados.
+  function parseCSV(texto, sep) {
+    var filas = [], fila = [], campo = "", enComillas = false;
+    for (var i = 0; i < texto.length; i++) {
+      var ch = texto.charAt(i);
+      if (enComillas) {
+        if (ch === '"') {
+          if (texto.charAt(i + 1) === '"') { campo += '"'; i++; }  // comilla escapada
+          else enComillas = false;
+        } else campo += ch;
+      } else if (ch === '"') { enComillas = true; }
+      else if (ch === sep) { fila.push(campo); campo = ""; }
+      else if (ch === "\n") { fila.push(campo); filas.push(fila); fila = []; campo = ""; }
+      else if (ch !== "\r") { campo += ch; }
+    }
+    if (campo !== "" || fila.length) { fila.push(campo); filas.push(fila); }
+    return filas.filter(function (f) { return f.some(function (c) { return c.trim() !== ""; }); });
+  }
+
+  function importarCSV(texto) {
+    if (texto.charCodeAt(0) === 0xFEFF) texto = texto.slice(1);   // quitar BOM
+    var primeraLinea = texto.split("\n")[0] || "";
+    // El separador se deduce de la cabecera: si no, un importe como "23,40"
+    // partiría la fila por la mitad.
+    var sep = (primeraLinea.split(";").length > primeraLinea.split(",").length) ? ";" : ",";
+
+    var filas = parseCSV(texto, sep);
+    if (filas.length < 2) return [];
+
+    var cabecera = filas[0].map(function (h) { return sinAcentos(h).replace(/[^a-z0-9]/g, ""); });
+    function col(nombre) { return cabecera.indexOf(nombre); }
+    var iFecha = col("fecha"), iTipo = col("tipomov"), iCatId = col("categoriaid"),
+        iCat = col("categoria"), iCuenta = col("cuenta"), iNota = col("concepto"),
+        iImp = col("importeeur"), iReemb = col("reembolsable"), iReembdo = col("reembolsado");
+    if (iImp < 0) iImp = col("importe");
+    if (iFecha < 0 || iImp < 0) return [];   // sin fecha e importe no hay nada que hacer
+
+    // Para poder mapear categorías por su nombre visible
+    var porNombre = {};
+    CATS.forEach(function (c) { porNombre[sinAcentos(c.label)] = c.id; });
+
+    var out = [];
+    filas.slice(1).forEach(function (f) {
+      var amt = parseAmount(f[iImp]);
+      if (isNaN(amt) || amt <= 0) return;
+      var fecha = (f[iFecha] || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+      var kind = (iTipo > -1 && sinAcentos(f[iTipo]) === "ingreso") ? "ingreso" : "gasto";
+
+      var catId = null;
+      if (iCatId > -1 && f[iCatId] && CAT_MAP[f[iCatId].trim()]) catId = f[iCatId].trim();
+      else if (iCat > -1 && porNombre[sinAcentos(f[iCat])]) catId = porNombre[sinAcentos(f[iCat])];
+
+      out.push({
+        amount: Math.abs(amt),
+        date: fecha,
+        note: iNota > -1 ? (f[iNota] || "").trim() : "",
+        kind: kind,
+        cuenta: iCuenta > -1 ? (f[iCuenta] || "").trim() : "",
+        reembolsable: iReemb > -1 && sinAcentos(f[iReemb]) === "si",
+        reembolsado: iReembdo > -1 && sinAcentos(f[iReembdo]) === "si",
+        categoryId: kind === "ingreso" ? "otros" : (catId || "sin_clasificar")
+      });
+    });
+    return out;
   }
 
   // ---------- CSV export ----------
   function exportCSV() {
     if (expenses.length === 0) { toast("No hay nada que exportar"); return; }
-    var rows = [["Fecha", "Tipo_mov", "Categoria", "Tipo", "Cuenta", "Concepto", "Importe_EUR"]];
+    // Se incluye CategoriaId para que la copia se pueda volver a importar aunque
+    // luego cambies el nombre visible de una categoría.
+    var rows = [["Fecha", "Tipo_mov", "CategoriaId", "Categoria", "Tipo", "Cuenta", "Concepto", "Importe_EUR", "Reembolsable", "Reembolsado"]];
     expenses.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
       var c = cat(e.categoryId);
-      rows.push([e.date, (e.kind === "ingreso" ? "ingreso" : "gasto"), c.label, c.type, (e.cuenta || ""), (e.note || "").replace(/"/g, "'"), String(e.amount).replace(".", ",")]);
+      rows.push([e.date, (e.kind === "ingreso" ? "ingreso" : "gasto"), e.categoryId, c.label, c.type,
+                 (e.cuenta || ""), (e.note || "").replace(/"/g, "'"), String(e.amount).replace(".", ","),
+                 (e.reembolsable ? "si" : "no"), (e.reembolsado ? "si" : "no")]);
     });
     var csv = rows.map(function (r) {
       return r.map(function (cell) { return '"' + cell + '"'; }).join(";");
@@ -2358,6 +2904,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     document.getElementById("pasteBtn").addEventListener("click", openPasteSheet);
     document.getElementById("fijosBtn").addEventListener("click", openFijosSheet);
     document.getElementById("presupBtn").addEventListener("click", openPresupuestosSheet);
+    document.getElementById("catsBtn").addEventListener("click", openCategoriasSheet);
     document.getElementById("scrim").addEventListener("click", closeModal);
     document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
     // Detalle de día (Calendario): tocar un movimiento lo abre para editar. Un único escuchador, no se acumula.
@@ -2365,12 +2912,31 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var it = ev.target.closest(".item");
       if (!it) return;
       var e = expenses.find(function (x) { return x.id === it.getAttribute("data-id"); });
-      if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta });
+      if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta, reembolsable: e.reembolsable });
     });
     document.getElementById("exportBtn").addEventListener("click", exportCSV);
     document.getElementById("exportBtn2").addEventListener("click", exportCSV);
 
     document.getElementById("content").addEventListener("click", function (ev) {
+      // Marcar un gasto adelantado como ya devuelto. Va ANTES que el de deudas
+      // porque comparte el estilo del botón ✓ y si no lo capturaría aquel.
+      var cobradoBtn = ev.target.closest("[data-cobrado-id]");
+      if (cobradoBtn) {
+        ev.stopPropagation();
+        var cobId = cobradoBtn.getAttribute("data-cobrado-id");
+        var mov2 = expenses.find(function (x) { return x.id === cobId; });
+        if (mov2) {
+          mov2.reembolsado = true;
+          render();
+          saveExpense(mov2).then(function (ok) {
+            if (ok) { toast("Marcado como devuelto ✓"); return; }
+            mov2.reembolsado = false;
+            render();
+            avisoFallo("marcarlo como devuelto");
+          });
+        }
+        return;
+      }
       // Marcar una deuda como pagada
       var settleBtn = ev.target.closest(".debt-settle");
       if (settleBtn) {
@@ -2466,7 +3032,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       if (ci) {
         var id = ci.getAttribute("data-id");
         var e = expenses.find(function (x) { return x.id === id; });
-        if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta });
+        if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta, reembolsable: e.reembolsable });
         return;
       }
       // Editar desde la lista de movimientos
@@ -2474,11 +3040,12 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       if (!it) return;
       var id2 = it.getAttribute("data-id");
       var e2 = expenses.find(function (x) { return x.id === id2; });
-      if (e2) openModal({ id: e2.id, amount: e2.amount, categoryId: e2.categoryId, note: e2.note, date: e2.date, kind: e2.kind, cuenta: e2.cuenta });
+      if (e2) openModal({ id: e2.id, amount: e2.amount, categoryId: e2.categoryId, note: e2.note, date: e2.date, kind: e2.kind, cuenta: e2.cuenta, reembolsable: e2.reembolsable });
     });
   }
 
   // ---------- Init ----------
+  aplicarTema(temaGuardado());
   wire();
   initAuth();
 })();

@@ -98,7 +98,22 @@ updated_at  timestamptz not null default now()
 primary key (user_id, category_id)
 ```
 
-La tabla `gastos` tiene además `cuenta text not null default ''` (de qué banco sale el movimiento).
+**`categorias`** — cómo ve cada usuario sus categorías (añadida el 26 jul 2026):
+```sql
+user_id    uuid    not null default auth.uid()
+cat_id     text    not null       -- NUNCA se renombra: está escrito en los movimientos
+label      text                   -- null = usar el nombre de serie
+emoji      text
+color      text
+oculta     boolean not null default false
+propia     boolean not null default false   -- true = la creó el usuario
+orden      int                              -- reservado, aún sin usar
+primary key (user_id, cat_id)
+```
+
+La tabla `gastos` tiene además:
+- `cuenta text not null default ''` — de qué banco sale el movimiento.
+- `reembolsable boolean` / `reembolsado boolean` — ver «Movimientos reembolsables».
 
 Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delete). **Ojo con la forma de escribirlas:** usan `(select auth.uid()) = user_id`, no `auth.uid() = user_id`. El `select` hace que Postgres lo evalúe una vez por consulta en vez de una vez por fila; sin él, el auditor de rendimiento de Supabase da 8 avisos. La condición es idéntica.
 
@@ -107,12 +122,35 @@ Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delet
 
 - **`estudios`** (📚, color `#3F7E7A`) se añadió el 3 de julio de 2026.
 
+### Modo oscuro
+Toda la paleta vive en variables CSS de `:root`. El modo oscuro se aplica de dos formas: automática (`@media (prefers-color-scheme: dark)` con `:root:not([data-tema="claro"])`) o a mano (`:root[data-tema="oscuro"]`). La elección se guarda en **localStorage del dispositivo**, no en Supabase: es normal querer el móvil en oscuro y el ordenador en claro.
+
+Hay un `<script>` diminuto en el `<head>` que aplica el tema **antes de pintar nada**, para que la app no dé un fogonazo blanco al abrirse en oscuro.
+
+⚠️ **Al añadir estilos nuevos, usar siempre `var(--...)`, nunca un color a pelo**, o esa parte se verá mal en oscuro. Las únicas excepciones legítimas son los colores de las categorías (`CATS_BASE` y `COLORES_CAT`), que son datos, no tema.
+
 ### Diseño visual: "Claro Índigo"
 - Fondo blanco puro, tarjetas con borde gris suave (`#E5E7EB`).
 - Color principal: índigo `#4F46E5`.
 - Ingresos en verde (`#16A34A` / fondo `#DCFCE7`), gastos en rojo (`#DC2626` / fondo `#FEE2E2`).
 - Fuentes: Fraunces (serif, títulos y números) + Hanken Grotesk (sans, resto).
 - Versión de ordenador: media query `@media (min-width: 920px)` con layout de dos columnas. El móvil no cambia.
+
+### Movimientos reembolsables — DECISIÓN IMPORTANTE
+Un movimiento puede marcarse como **reembolsable**: en un gasto significa «me lo van a devolver», y en un ingreso «es la devolución de un gasto mío». Los marcados **no cuentan en los totales ni en el desglose por categoría** (`monthGastos()` y `monthIngresos()` los filtran con `esPropio()`), pero **sí siguen apareciendo** en la lista de Movimientos y en el Calendario, con borde discontinuo.
+
+Nació de un problema real: en junio de 2026 Alberto adelantó 56,15 € de la ITV a Verónica y ella se los devolvió; esos 56,15 € inflaban su categoría de coche aunque el dinero volviera. Con esto, adelantar dinero deja de ensuciar las estadísticas.
+
+Los pendientes salen en la tarjeta **💸 Pendiente de cobro** del Resumen, con un ✓ para marcar que ya te lo devolvieron.
+
+### Categorías: se pueden personalizar, pero los IDs son intocables
+`CATS_BASE` tiene las 18 de serie. La tabla `categorias` guarda lo que cada usuario cambia encima (nombre, emoji, color, ocultar) y las que crea nuevas; `recalcularCategorias()` mezcla ambas en `CATS`.
+
+**Reglas que no se pueden saltar:**
+- Un `cat_id` **nunca** se renombra ni se borra si tiene movimientos: están guardados con ese id.
+- Solo se pueden borrar las categorías `propia` que no tengan ningún movimiento. Para el resto, la opción es **ocultarlas**.
+- Los selectores usan `catsParaElegir(seleccionada)`, que esconde las ocultas **pero nunca la que está seleccionada**: si no, al editar un movimiento viejo se le cambiaría la categoría sin querer.
+- Ocultar una categoría **no borra su presupuesto**: la pantalla de presupuestos solo toca las categorías que ha mostrado.
 
 ### Gastos fijos = PREVISIÓN, nunca movimientos — DECISIÓN IMPORTANTE
 Los "gastos fijos" (tabla `fijos`, botón *Mis gastos fijos*) **no crean movimientos ni suman en los totales**. Se decidió así el 26 jul 2026 por un motivo concreto: Alberto mete sus datos desde los extractos del banco, y en el extracto **ya vienen** Netflix, Basic-Fit, Cetelem… Si la app los generase por su cuenta, se contarían dos veces (el antiduplicados solo los pillaría si coincidieran en día e importe exactos, y el cobro real no siempre cae el mismo día).
@@ -146,7 +184,7 @@ El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v14`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v15`**.
 - **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
 - **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
@@ -258,4 +296,12 @@ Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue 
 - **Presupuesto por categoría.** Límite mensual, tarjeta en Resumen con barra por categoría (verde / ámbar al 80% / rojo al pasarse) y aviso de en cuántas te has pasado. Solo aparece si hay al menos un límite puesto.
 - **Buscador en Movimientos.** Ver la descripción en «Pestañas de la app».
 
-**Pendiente para la Fase 3** (por orden de valor): enlazar Deudas con movimientos · gestionar categorías desde la app · importar CSV · modo oscuro · cargar por rango de fechas en vez de todo el histórico (hoy `loadData()` trae todos los movimientos; con 338 va sobrado, con miles no). **Nota:** las etiquetas de algunas categorías siguen siendo personales de Alberto (p. ej. «Valencia y pareja»); se resolverá cuando se puedan gestionar desde la app.
+#### Fase 3 de mejoras (26 jul 2026) — caché `v15`
+- **Movimientos reembolsables.** Ver su sección. Sustituyó a la idea de «enlazar Deudas con movimientos»: se planteó eso, pero el problema real de Alberto no era que estuvieran desconectadas, sino que el dinero adelantado le ensuciaba las categorías.
+- **Categorías gestionables** desde la app (botón *Categorías*). Ver su sección. Esto resuelve además que las etiquetas fueran personales de Alberto: ahora cada uno se las renombra.
+- **Importar CSV**, dentro de *Pegar movimientos*. Pasa por la misma pantalla de revisión con antiduplicados. Entiende los CSV antiguos (sin `CategoriaId`, `Cuenta` ni `Reembolsable`), mapea las categorías por id o por nombre, detecta el separador (`;` o `,`) para no partir los importes con coma decimal, aguanta saltos de línea de Windows y avisa sin romperse si el fichero no vale.
+- **Modo oscuro.** Ver su sección. Se convirtieron 73 colores escritos a pelo en variables. Contraste medido: 14,5:1 en oscuro y 17,7:1 en claro.
+
+**Qué NO se hizo, y por qué:** estaba apuntado «cargar los movimientos por rango de fechas» como mejora de rendimiento. Se descartó porque **rompería el buscador**, que necesita todos los meses en memoria para buscar en el histórico. Con 338 apuntes sobra de largo; retomarlo solo si algún día son muchos miles, y entonces habrá que rediseñar la búsqueda para que consulte a Supabase.
+
+**Ideas para más adelante:** recordatorio de cuotas próximas · gráfico de tendencia por categoría · reordenar categorías (la columna `orden` ya está en la tabla) · adjuntar foto del ticket a un movimiento.
