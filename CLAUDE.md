@@ -65,7 +65,17 @@ settled     boolean     not null default false
 created_at  timestamptz not null default now()
 ```
 
-Ambas tablas tienen RLS activado con 4 políticas (select/insert/update/delete) basadas en `auth.uid() = user_id`.
+**`perfiles`** — ajustes propios de cada usuario (añadida el 26 jul 2026):
+```sql
+user_id       uuid        primary key references auth.users(id) on delete cascade default auth.uid()
+ciudad        text        not null default ''      -- sale en el subtítulo de la cabecera
+etapa_nombre  text        not null default ''      -- p. ej. "Holanda"
+etapa_inicio  date                                 -- null = sin etapa configurada
+created_at    timestamptz not null default now()
+updated_at    timestamptz not null default now()
+```
+
+Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delete). **Ojo con la forma de escribirlas:** usan `(select auth.uid()) = user_id`, no `auth.uid() = user_id`. El `select` hace que Postgres lo evalúe una vez por consulta en vez de una vez por fila; sin él, el auditor de rendimiento de Supabase da 8 avisos. La condición es idéntica.
 
 ### Las 18 categorías — IDs SAGRADOS, nunca cambiar
 `vivienda`, `suministros`, `super`, `comer`, `transporte`, `coche`, `viajes`, `salud`, `telefono`, `suscripciones`, `estudios`, `ropa`, `valencia`, `ocio`, `peluqueria`, `tramites`, `otros`, `sin_clasificar`
@@ -85,21 +95,28 @@ Resumen · Movimientos · Calendario · Evolución · Deudas
 - **Resumen:** donut + desglose por categoría (solo gastos, no ingresos).
 - **Movimientos:** lista cronológica, con botón de borrado rápido por fila.
 - **Calendario:** cuadrícula del mes con gasto (rojo) e ingreso (verde) bajo cada día; tocar un día abre el detalle.
-- **Evolución:** comparación mes a mes desde el 20 de mayo de 2026 (fecha de llegada a Holanda). Constante `ETAPA_INICIO = "2026-05-20"` en el código.
+- **Evolución:** comparación mes a mes. Si el usuario ha configurado una *etapa* en su perfil (nombre + fecha de inicio), separa lo de antes y lo de después; si no la ha configurado, muestra simplemente todos los meses seguidos. **Ya no hay fechas ni ciudades fijas en el código** (antes había una constante con la fecha de mudanza de Alberto, y sus amigos veían textos que no iban con ellos).
 - **Deudas:** balance de lo que le deben y lo que debe, con botón de liquidar (✓) sin borrar el histórico.
 
-### Escaneo de tickets/PDF — DECISIÓN IMPORTANTE
-La función de escanear ticket/PDF con la API de Anthropic **existe en el código pero está inactiva a propósito**: Alberto decidió NO meter una API key de Anthropic en el navegador para evitar cualquier coste o riesgo de que alguien la copie del repositorio público.
+### Escaneo de tickets/PDF — ELIMINADO (26 jul 2026)
+Existió una función para escanear tickets y PDF con la API de Anthropic, pero Alberto decidió NO meter una API key de Anthropic en el navegador (coste y riesgo de que alguien la copie del repo público). Quedó inactiva, luego oculta, y el **26 jul 2026 se borró del todo**: eran unas 200 líneas de código muerto, y el botón *"🔎 Deducir del concepto"* estaba visible pero **siempre fallaba** (llamaba a la API sin clave, y además el navegador lo bloquea por CORS).
 
-**Flujo real que usa Alberto:** pega el PDF del extracto bancario en un chat (Claude o Gemini) con un prompt específico que devuelve el listado en formato `fecha;categoriaId;importe;concepto;tipo`, y luego pega ese texto en el botón **"Pegar movimientos"** de la app (que sí funciona, vía `parsePasted()`).
+Si algún día se quiere recuperar, está en el historial de Git. La forma correcta de hacerlo sería una *Edge Function* de Supabase que guarde la clave en el servidor, nunca en el navegador.
 
-**Estado (23 jun 2026):** el botón "Ticket, captura o PDF" se **ocultó** (con `style="display:none"` en el `<label id="scanBtn">`), porque el escaneo automático no funciona y era un botón muerto. El código del escaneo sigue ahí por si algún día se reactiva; para volver a mostrarlo, quitar ese `display:none`.
+**Flujo real que usa Alberto:** o le manda el extracto a Claude en una sesión como esta y se lo mete directamente en Supabase (ver «Importar movimientos desde extractos»), o pega en el botón **"Pegar movimientos"** un listado en formato `fecha;categoriaId;importe;concepto;tipo` (vía `parsePasted()`).
+
+### Recuperar la contraseña
+El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.resetPasswordForEmail`. Al volver desde el enlace, Supabase lanza el evento `PASSWORD_RECOVERY` y la app muestra la pantalla `#recoveryScreen` para poner una nueva (`sb.auth.updateUser`). **No se deja entrar sin cambiarla**, porque si no el enlace del correo serviría para colarse.
+
+⚠️ **Dos cosas de configuración de Supabase que hay que revisar** (no se pueden hacer desde el código): que la URL `https://joruxo.github.io/gastos/` esté en las *Redirect URLs* permitidas, y que el plan gratuito tiene un límite bajo de correos por hora.
 
 ### Otras funciones clave
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v12`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v13`**.
+- **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
+- **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
 ## Reglas de clasificación de movimientos bancarios
 Cuando se procesan extractos del banco (Santander de Alberto, u otros bancos de sus amigos):
@@ -190,3 +207,16 @@ Se arregla reactivando el proyecto (`restore_project`): es gratis, no se pierde 
 - **Tarea automática anti-pausa:** `.github/workflows/mantener-despierta.yml` consulta la base de datos a diario (y avisa por email si falla), con un commit mensual a `.keepalive` para que GitHub no desactive la tarea por inactividad del repo.
 - **Redirecciones aplicadas a los 4 repos viejos** (ya estaban descritas arriba; se ejecutaron este día). Cada uno lleva ahora la página de redirección y el service worker autodestructivo. El `CLAUDE.md` de `gastos-Joruxo` se sustituyó por un aviso de repo retirado.
 - **Alberto abrió cuenta en Trade Republic**: ahora manda dos extractos (Santander PDF + Trade Republic CSV). Se documentaron las dos trampas nuevas del antiduplicados (fechas manuales distintas a las del banco, y traspasos entre sus propias cuentas).
+
+#### Fase 1 de mejoras (26 jul 2026) — caché `v13`
+Auditoría del código y arreglo de todo lo roto. Alberto confirmó que la app es **de uso personal y para amigos**; la Play Store queda como dirección futura, no como objetivo actual.
+- **La app ya no le habla solo a Alberto.** Se creó la tabla `perfiles` y se quitaron la ciudad, la fecha de mudanza y el nombre del manifest (`"Mis Gastos - Aalsmeer"`), que eran suyos y los veían sus tres amigos.
+- **Si falla el guardado, se deshace en pantalla** (ver «Otras funciones clave»). Era el bug más grave: la app daba por guardado algo que no lo estaba.
+- **Antiduplicados arreglado**: al céntimo y contando repeticiones.
+- **Recuperar contraseña**: antes, si un amigo la olvidaba, había que resetearla a mano en Supabase.
+- **Borradas ~200 líneas de código muerto** del escaneo con IA, incluido un botón visible que siempre fallaba.
+- **8 políticas RLS optimizadas** con `(select auth.uid())`: el auditor pasó de 8 avisos a 0.
+- **Colores del manifest corregidos**: eran de la paleta verde antigua, así que la pantalla de carga salía verde y luego saltaba a blanco.
+- Todo verificado con una prueba de integración (Supabase falseado) que recorre las 5 pestañas, los guardados que fallan y el pegado de movimientos.
+
+**Pendiente para la Fase 2** (por orden de valor): gastos recurrentes · campo de cuenta/banco (ya tiene dos) · presupuesto por categoría · buscador en Movimientos · enlazar Deudas con movimientos · gestionar categorías desde la app · importar CSV · modo oscuro. **Nota:** las etiquetas de algunas categorías siguen siendo personales de Alberto (p. ej. «Valencia y pareja»); se resolverá cuando se puedan gestionar desde la app.

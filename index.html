@@ -271,13 +271,9 @@ body { background: #FFFFFF; }
 .del-btn { background: var(--accent-soft); color: var(--danger); border: 1px solid #F5C9C9; flex: 0 0 54px; }
 
 .scan-status { display: flex; align-items: center; gap: 12px; background: var(--accent-soft); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; font-size: 13.5px; color: #3730A3; }
-.spinner { width: 18px; height: 18px; border: 2.5px solid rgba(55,48,163,.25); border-top-color: #3730A3; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .note-err { color: var(--danger); font-size: 12.5px; }
 
-.deduce-btn { background: var(--primary-soft); color: var(--primary); border: none; border-radius: 9px; padding: 7px 11px; font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-.deduce-btn:active { transform: scale(.96); }
-.deduce-btn:disabled { opacity: .6; }
 .spinner-sm { width: 13px; height: 13px; border: 2px solid rgba(79,70,229,.25); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
 .cat-hint { background: var(--accent-soft); border-radius: 12px; padding: 11px 13px; font-size: 12.5px; color: #3730A3; line-height: 1.45; margin-bottom: 12px; }
 
@@ -351,12 +347,23 @@ body { background: #FFFFFF; }
 }
 @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 /* ---------- Login screen ---------- */
-#loginScreen {
+#loginScreen, #recoveryScreen {
   position: fixed; inset: 0; z-index: 100;
   background: #FFFFFF;
   display: flex; align-items: center; justify-content: center; padding: 24px;
+  overflow-y: auto;
 }
-#loginScreen.hidden { display: none; }
+#recoveryScreen { z-index: 101; }
+#loginScreen.hidden, #recoveryScreen.hidden { display: none; }
+.login-link {
+  display: block; width: 100%; margin-top: 14px; padding: 4px;
+  background: none; border: none; color: var(--primary); cursor: pointer;
+  font-family: 'Hanken Grotesk'; font-weight: 600; font-size: 13px; text-align: center;
+}
+.login-msg {
+  display: none; margin-top: 14px; border-radius: 12px; padding: 11px 13px;
+  background: var(--primary-soft); color: #3730A3; font-size: 12.5px; line-height: 1.45;
+}
 .login-box {
   width: 100%; max-width: 360px;
   background: var(--surface); border-radius: var(--radius);
@@ -425,6 +432,28 @@ body { background: #FFFFFF; }
     </div>
     <div class="login-err" id="loginErr">Email o contraseña incorrectos</div>
     <button class="login-btn" id="loginBtn">Entrar</button>
+    <button type="button" class="login-link" id="forgotBtn">¿Has olvidado la contraseña?</button>
+    <div class="login-msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- Pantalla para poner una contraseña nueva. Solo aparece al volver desde el
+     enlace del correo de recuperación. -->
+<div id="recoveryScreen" class="hidden">
+  <div class="login-box">
+    <div class="mark">🔑</div>
+    <h2>Nueva contraseña</h2>
+    <p>Escribe la contraseña que quieres usar a partir de ahora.</p>
+    <div class="field">
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px;letter-spacing:.02em">NUEVA CONTRASEÑA</label>
+      <input id="newPass" class="txt-input" type="password" placeholder="••••••••" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px;letter-spacing:.02em">REPÍTELA</label>
+      <input id="newPass2" class="txt-input" type="password" placeholder="••••••••" autocomplete="new-password">
+    </div>
+    <div class="login-err" id="recErr"></div>
+    <button class="login-btn" id="recBtn">Guardar contraseña</button>
   </div>
 </div>
 <div id="app">
@@ -434,7 +463,7 @@ body { background: #FFFFFF; }
         <div class="mark">🌷</div>
         <div>
           <h1>Mis Gastos</h1>
-          <p>Aalsmeer · en euros</p>
+          <p id="brandSub">en euros</p>
         </div>
       </div>
       <div style="display:flex;gap:8px">
@@ -460,8 +489,6 @@ body { background: #FFFFFF; }
 
     <div class="actions">
       <button class="btn btn-primary" id="addBtn"><span class="ic">＋</span> Añadir gasto</button>
-      <!-- Botón de escaneo oculto: el escaneo automático no está activo (sin clave de Anthropic). Para reactivarlo, quitar el display:none. -->
-      <label class="btn btn-ghost" id="scanBtn" for="scanInput" style="display:none"><span class="ic">📷</span> Ticket, captura o PDF</label>
     </div>
 
     <div class="tabs">
@@ -490,7 +517,6 @@ body { background: #FFFFFF; }
     <button class="modal-close" id="modalCloseBtn" type="button" aria-label="Cerrar">✕</button>
   </div>
 
-  <input type="file" id="scanInput" accept="image/*,application/pdf" class="visually-hidden">
   <div class="toast" id="toast"></div>
 </div>
 <script>
@@ -538,6 +564,8 @@ body { background: #FFFFFF; }
   // ---------- State ----------
   var expenses = [];
   var debts = [];
+  // Ajustes propios de quien ha entrado. Vacíos = comportamiento genérico.
+  var perfil = { ciudad: "", etapaNombre: "", etapaInicio: null };
   var view = "resumen";
   var now = new Date();
   var viewYear = now.getFullYear();
@@ -610,6 +638,8 @@ body { background: #FFFFFF; }
   // ---------- Auth ----------
   function showLogin() { document.getElementById("loginScreen").classList.remove("hidden"); }
   function hideLogin() { document.getElementById("loginScreen").classList.add("hidden"); }
+  function showRecovery() { document.getElementById("recoveryScreen").classList.remove("hidden"); }
+  function hideRecovery() { document.getElementById("recoveryScreen").classList.add("hidden"); }
 
   function initAuth() {
     var btn = document.getElementById("loginBtn");
@@ -642,44 +672,141 @@ body { background: #FFFFFF; }
     btn.addEventListener("click", doLogin);
     passEl.addEventListener("keydown", function(e) { if (e.key === "Enter") doLogin(); });
 
+    // ----- He olvidado la contraseña -----
+    var forgotBtn = document.getElementById("forgotBtn");
+    var msgEl = document.getElementById("loginMsg");
+    function aviso(txt) { msgEl.textContent = txt; msgEl.style.display = "block"; }
+
+    forgotBtn.addEventListener("click", function () {
+      var email = emailEl.value.trim();
+      errEl.style.display = "none";
+      if (!email) { aviso("Escribe primero tu email aquí arriba."); emailEl.focus(); return; }
+      forgotBtn.disabled = true;
+      aviso("Enviando…");
+      sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })
+        .then(function (res) {
+          forgotBtn.disabled = false;
+          if (res.error) { aviso("No se pudo enviar el correo. Prueba otra vez en unos minutos."); return; }
+          aviso("Te hemos enviado un correo a " + email + ". Abre el enlace para poner una contraseña nueva. Mira también en spam.");
+        })
+        .catch(function () {
+          forgotBtn.disabled = false;
+          aviso("No se pudo enviar el correo. Revisa la conexión.");
+        });
+    });
+
+    // ----- Poner la contraseña nueva (al volver desde el correo) -----
+    var recBtn = document.getElementById("recBtn");
+    var recErr = document.getElementById("recErr");
+    recBtn.addEventListener("click", function () {
+      var p1 = document.getElementById("newPass").value;
+      var p2 = document.getElementById("newPass2").value;
+      recErr.style.display = "none";
+      if (p1.length < 6) { recErr.textContent = "La contraseña necesita al menos 6 caracteres."; recErr.style.display = "block"; return; }
+      if (p1 !== p2) { recErr.textContent = "Las dos contraseñas no coinciden."; recErr.style.display = "block"; return; }
+      recBtn.disabled = true;
+      recBtn.textContent = "Guardando…";
+      function recuperarBoton() { recBtn.disabled = false; recBtn.textContent = "Guardar contraseña"; }
+      sb.auth.updateUser({ password: p1 })
+        .then(function (res) {
+          recuperarBoton();
+          if (res.error) {
+            recErr.textContent = "No se pudo cambiar. El enlace puede haber caducado: pide el correo otra vez.";
+            recErr.style.display = "block";
+            return;
+          }
+          if (res.data && res.data.user) currentUser = res.data.user;
+          hideRecovery();
+          hideLogin();
+          // Limpia el token del enlace para que al recargar no vuelva a salir esta pantalla
+          if (history.replaceState) history.replaceState(null, "", location.pathname);
+          Promise.all([loadPerfil(), loadData(), loadDebts()]).then(function () {
+            render();
+            toast("Contraseña cambiada ✓");
+          });
+        })
+        .catch(function () {
+          recuperarBoton();
+          recErr.textContent = "No se pudo cambiar. Revisa la conexión.";
+          recErr.style.display = "block";
+        });
+    });
+
     sb.auth.onAuthStateChange(function(event, session) {
+      // Al volver desde el correo de recuperación, Supabase abre una sesión
+      // temporal y lanza este evento. Hay que pedir la contraseña nueva antes de
+      // dejar entrar, si no el enlace serviría para colarse sin saber la clave.
+      if (event === "PASSWORD_RECOVERY") {
+        currentUser = null;
+        hideLogin();
+        showRecovery();
+        return;
+      }
       if (session && session.user) {
         currentUser = session.user;
         hideLogin();
-        Promise.all([loadData(), loadDebts()]).then(function() { render(); });
+        Promise.all([loadPerfil(), loadData(), loadDebts()]).then(function(r) {
+          render();
+          // Si la carga falla, avisar en vez de mostrar la app vacía como si no
+          // hubiera nada guardado.
+          if (!r[1] || !r[2]) toast("No pude cargar tus datos. Revisa la conexión ⚠");
+        });
       } else {
         currentUser = null;
         expenses = [];
         debts = [];
+        perfil = { ciudad: "", etapaNombre: "", etapaInicio: null };
         showLogin();
       }
     });
   }
 
   // ---------- Storage (Supabase) ----------
+  // IMPORTANTE: todas estas funciones devuelven true si Supabase confirmó la
+  // operación y false si falló. Quien las llama TIENE que deshacer el cambio en
+  // pantalla cuando devuelvan false. Si no, la app mostraría un movimiento que
+  // en realidad no se guardó, y al recargar habría desaparecido.
+  function fallo(donde, err) {
+    console.error(donde, err);
+    return false;
+  }
+  function avisoFallo(accion) {
+    toast("No se pudo " + accion + ". Revisa la conexión ⚠");
+  }
+
+  // Convierte del formato interno de la app al formato de Supabase
+  function filaGasto(exp) {
+    return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind || "gasto" };
+  }
+
   function loadData() {
-    if (!currentUser) return Promise.resolve();
+    if (!currentUser) return Promise.resolve(true);
     return sb.from("gastos").select("*").order("date", { ascending: false })
       .then(function(res) {
-        if (res.error) { console.error("loadData", res.error); return; }
+        if (res.error) return fallo("loadData", res.error);
         expenses = (res.data || []).map(function(r) {
           return { id: r.id, amount: r.amount, categoryId: r.category_id, note: r.note || "", date: r.date, kind: r.kind || "gasto", createdAt: new Date(r.created_at).getTime() };
         });
-      });
+        return true;
+      }, function (err) { return fallo("loadData", err); });
   }
 
   function saveExpense(exp) {
-    // Convierte del formato interno de la app al formato de Supabase
-    var row = { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind || "gasto" };
-    return sb.from("gastos").upsert(row).then(function(res) {
-      if (res.error) { console.error("saveExpense", res.error); toast("Error al guardar 😕"); }
-    });
+    return sb.from("gastos").upsert(filaGasto(exp)).then(function(res) {
+      return res.error ? fallo("saveExpense", res.error) : true;
+    }, function (err) { return fallo("saveExpense", err); });
+  }
+
+  function saveExpenses(lista) {
+    return sb.from("gastos").upsert(lista.map(filaGasto)).then(function(res) {
+      return res.error ? fallo("saveExpenses", res.error) : true;
+    }, function (err) { return fallo("saveExpenses", err); });
   }
 
   function deleteExpense(id) {
     return sb.from("gastos").delete().eq("id", id).then(function(res) {
-      if (res.error) { console.error("deleteExpense", res.error); toast("Error al borrar 😕"); }
-    });
+      return res.error ? fallo("deleteExpense", res.error) : true;
+    }, function (err) { return fallo("deleteExpense", err); });
   }
 
   // Borra TODOS los movimientos del mes que se está viendo (con doble confirmación)
@@ -695,38 +822,70 @@ body { background: #FFFFFF; }
     var ini = monthKey(viewYear, viewMonth) + "-01";
     var fin = monthKey(viewYear, viewMonth) + "-" + pad2(diasMes);
     sb.from("gastos").delete().gte("date", ini).lte("date", fin).then(function(res) {
-      if (res.error) { console.error("deleteMonth", res.error); toast("Error al borrar 😕"); return; }
+      if (res.error) { fallo("deleteMonth", res.error); avisoFallo("borrar el mes"); return; }
       expenses = expenses.filter(function (e) { return (e.date || "").slice(0, 7) !== monthKey(viewYear, viewMonth); });
       render();
       toast("Borrado " + nombre + " ✓");
-    });
+    }, function (err) { fallo("deleteMonth", err); avisoFallo("borrar el mes"); });
   }
-
-  function saveData() { return Promise.resolve(); } // compatibilidad — no se usa directamente
 
   // ---------- Deudas (Supabase) ----------
   function loadDebts() {
-    if (!currentUser) return Promise.resolve();
+    if (!currentUser) return Promise.resolve(true);
     return sb.from("deudas").select("*").order("date", { ascending: false })
       .then(function(res) {
-        if (res.error) { console.error("loadDebts", res.error); return; }
+        if (res.error) return fallo("loadDebts", res.error);
         debts = (res.data || []).map(function(r) {
           return { id: r.id, persona: r.persona, amount: r.amount, direction: r.direction, note: r.note || "", date: r.date, settled: !!r.settled, createdAt: new Date(r.created_at).getTime() };
         });
-      });
+        return true;
+      }, function (err) { return fallo("loadDebts", err); });
   }
 
   function saveDebt(d) {
     var row = { id: d.id, persona: d.persona, amount: d.amount, direction: d.direction, note: d.note || "", date: d.date, settled: !!d.settled };
     return sb.from("deudas").upsert(row).then(function(res) {
-      if (res.error) { console.error("saveDebt", res.error); toast("Error al guardar 😕"); }
-    });
+      return res.error ? fallo("saveDebt", res.error) : true;
+    }, function (err) { return fallo("saveDebt", err); });
   }
 
   function deleteDebt(id) {
     return sb.from("deudas").delete().eq("id", id).then(function(res) {
-      if (res.error) { console.error("deleteDebt", res.error); toast("Error al borrar 😕"); }
-    });
+      return res.error ? fallo("deleteDebt", res.error) : true;
+    }, function (err) { return fallo("deleteDebt", err); });
+  }
+
+  // ---------- Perfil del usuario (Supabase) ----------
+  // Antes la ciudad y la fecha de inicio de etapa estaban fijas en el código (las
+  // de Alberto), así que sus amigos veían textos que no iban con ellos. Ahora cada
+  // usuario tiene las suyas. Si alguien no las configura, la app se comporta de
+  // forma genérica: sin ciudad en la cabecera y sin dividir la Evolución en etapas.
+  function loadPerfil() {
+    if (!currentUser) return Promise.resolve(true);
+    return sb.from("perfiles").select("*").limit(1)
+      .then(function(res) {
+        if (res.error) return fallo("loadPerfil", res.error);
+        var p = (res.data || [])[0];
+        perfil = {
+          ciudad: (p && p.ciudad) || "",
+          etapaNombre: (p && p.etapa_nombre) || "",
+          etapaInicio: (p && p.etapa_inicio) || null
+        };
+        return true;
+      }, function (err) { return fallo("loadPerfil", err); });
+  }
+
+  function savePerfil(nuevo) {
+    var row = {
+      user_id: currentUser.id,
+      ciudad: nuevo.ciudad || "",
+      etapa_nombre: nuevo.etapaNombre || "",
+      etapa_inicio: nuevo.etapaInicio || null,
+      updated_at: new Date().toISOString()
+    };
+    return sb.from("perfiles").upsert(row).then(function(res) {
+      return res.error ? fallo("savePerfil", res.error) : true;
+    }, function (err) { return fallo("savePerfil", err); });
   }
 
   // ---------- Selectors / computations ----------
@@ -755,6 +914,9 @@ body { background: #FFFFFF; }
     var gastos = sum(monthGastos());
     var ingresos = sum(monthIngresos());
     var queda = ingresos - gastos;
+    // Subtítulo de la cabecera: la ciudad es la del perfil de cada usuario
+    document.getElementById("brandSub").textContent =
+      perfil.ciudad ? (perfil.ciudad + " · en euros") : "en euros";
     document.getElementById("monthLabel").textContent = monthName(viewMonth) + " " + viewYear;
     document.getElementById("monthTotal").textContent = eur(queda);
     document.getElementById("fixedTotal").textContent = eurShort(ingresos);
@@ -870,19 +1032,31 @@ body { background: #FFFFFF; }
     content.innerHTML = html;
   }
 
-  // ---------- Render: evolución (España antes / etapa Holanda desde 20 mayo 2026) ----------
-  var ETAPA_INICIO = "2026-05-20"; // fecha de llegada a Holanda
+  // ---------- Render: evolución ----------
+  // Si el usuario ha configurado una "etapa" en su perfil (por ejemplo, la fecha
+  // en que se mudó de país), esta pestaña separa lo de antes y lo de después. Si
+  // no la ha configurado, muestra simplemente todos los meses seguidos.
+  function fechaLarga(iso) {
+    var d = new Date(iso + "T00:00:00");
+    return d.getDate() + " de " + monthName(d.getMonth());
+  }
+  function diaAnterior(iso) {
+    var d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
 
   function renderEvolucion() {
     var content = document.getElementById("content");
+    var etapa = perfil.etapaInicio || null;
 
-    // Separar en dos etapas por fecha exacta
+    // Separar en dos etapas por fecha exacta (solo si hay etapa configurada)
     var antes = { ingresos: 0, gastos: 0, n: 0 };
     var meses = {};
     expenses.forEach(function (e) {
       var f = e.date || "";
       if (!f) return;
-      if (f < ETAPA_INICIO) {
+      if (etapa && f < etapa) {
         if (e.kind === "ingreso") antes.ingresos += (e.amount || 0); else antes.gastos += (e.amount || 0);
         antes.n++;
       } else {
@@ -920,7 +1094,11 @@ body { background: #FFFFFF; }
       var m = meses[k];
       var queda = m.ingresos - m.gastos;
       var nombreMes = monthName(parseInt(k.slice(5, 7), 10) - 1);
-      var etiqueta = (k === "2026-05") ? nombreMes + " (desde el 20)" : nombreMes;
+      // En el mes en que empieza la etapa se avisa de que es un mes parcial
+      var etiqueta = nombreMes;
+      if (etapa && k === etapa.slice(0, 7)) {
+        etiqueta = nombreMes + " (desde el " + new Date(etapa + "T00:00:00").getDate() + ")";
+      }
       var pctIng = maxVal > 0 ? (m.ingresos / maxVal * 100) : 0;
       var pctGas = maxVal > 0 ? (m.gastos / maxVal * 100) : 0;
       return '<div style="margin-bottom:18px">' +
@@ -942,11 +1120,17 @@ body { background: #FFFFFF; }
     }).join("");
 
     var html = "";
-    html += bloqueTotales("Mi etapa en Holanda", "desde el 20 de mayo", totIng, totGas);
+    if (etapa) {
+      var tituloEtapa = perfil.etapaNombre ? ("Mi etapa en " + esc(perfil.etapaNombre)) : "Desde el inicio de la etapa";
+      html += bloqueTotales(tituloEtapa, "desde el " + fechaLarga(etapa), totIng, totGas);
+    } else {
+      html += bloqueTotales("Todo lo registrado", claves.length + (claves.length === 1 ? " mes" : " meses"), totIng, totGas);
+    }
     if (claves.length > 0) html += '<div class="card"><h3>Mes a mes</h3>' + barras + '</div>';
-    // Bloque España (antes de venir), separado y más discreto
-    if (antes.n > 0) {
-      html += bloqueTotales("Antes de venir", "España, hasta el 19 de mayo · " + antes.n + " mov.", antes.ingresos, antes.gastos);
+    // Bloque de lo anterior a la etapa, separado y más discreto
+    if (etapa && antes.n > 0) {
+      var tituloAntes = perfil.etapaNombre ? ("Antes de " + esc(perfil.etapaNombre)) : "Antes de la etapa";
+      html += bloqueTotales(tituloAntes, "hasta el " + fechaLarga(diaAnterior(etapa)) + " · " + antes.n + " mov.", antes.ingresos, antes.gastos);
     }
     content.innerHTML = html;
   }
@@ -1157,25 +1341,42 @@ body { background: #FFFFFF; }
       if (isNaN(amt) || amt <= 0) { toast("Pon un importe válido"); document.getElementById("dAmount").focus(); return; }
       var note2 = document.getElementById("dNote").value.trim();
       var date2 = document.getElementById("dDate").value || todayISO();
-      var d;
+      var d, antes = null, esNueva = !editingDebtId;
       if (editingDebtId) {
         d = debts.find(function (x) { return x.id === editingDebtId; });
-        if (d) { d.persona = persona2; d.amount = amt; d.direction = direction; d.note = note2; d.date = date2; }
+        if (!d) { closeModal(); return; }
+        antes = { persona: d.persona, amount: d.amount, direction: d.direction, note: d.note, date: d.date };
+        d.persona = persona2; d.amount = amt; d.direction = direction; d.note = note2; d.date = date2;
       } else {
         d = { id: uid(), persona: persona2, amount: amt, direction: direction, note: note2, date: date2, settled: false, createdAt: Date.now() };
         debts.push(d);
       }
-      saveDebt(d).then(function () { toast(editingDebtId ? "Deuda actualizada ✓" : "Deuda guardada ✓"); });
       closeModal();
       render();
+      saveDebt(d).then(function (ok) {
+        if (ok) { toast(esNueva ? "Deuda guardada ✓" : "Deuda actualizada ✓"); return; }
+        if (esNueva) debts = debts.filter(function (x) { return x.id !== d.id; });
+        else if (antes) {
+          d.persona = antes.persona; d.amount = antes.amount;
+          d.direction = antes.direction; d.note = antes.note; d.date = antes.date;
+        }
+        render();
+        avisoFallo("guardar la deuda");
+      });
     });
 
     var delBtn = document.getElementById("dDelBtn");
     if (delBtn) delBtn.addEventListener("click", function () {
+      var borrada = debts.find(function (x) { return x.id === editingDebtId; });
       debts = debts.filter(function (x) { return x.id !== editingDebtId; });
-      deleteDebt(editingDebtId).then(function () { toast("Deuda eliminada"); });
       closeModal();
       render();
+      deleteDebt(editingDebtId).then(function (ok) {
+        if (ok) { toast("Deuda eliminada"); return; }
+        if (borrada) debts.push(borrada);
+        render();
+        avisoFallo("borrar la deuda");
+      });
     });
 
     setTimeout(function () { var p = document.getElementById("dPersona"); if (p && !editingDebtId) p.focus(); }, 250);
@@ -1230,17 +1431,19 @@ body { background: #FFFFFF; }
     document.getElementById("adjSaveBtn").addEventListener("click", function () {
       var adj = parseAmount(document.getElementById("adjAmount").value);
       if (isNaN(adj) || adj <= 0) { toast("Pon un importe válido"); document.getElementById("adjAmount").focus(); return; }
+      var antesAmount = deuda.amount, antesSettled = deuda.settled;
       var nuevo = tipo === "pagar" ? (deuda.amount - adj) : (deuda.amount + adj);
-      if (nuevo <= 0) {
-        deuda.amount = 0;
-        deuda.settled = true;
-        saveDebt(deuda).then(function () { toast("Deuda liquidada ✓"); });
-      } else {
-        deuda.amount = Math.round(nuevo * 100) / 100;
-        saveDebt(deuda).then(function () { toast("Deuda actualizada ✓"); });
-      }
+      var liquidada = nuevo <= 0;
+      if (liquidada) { deuda.amount = 0; deuda.settled = true; }
+      else { deuda.amount = Math.round(nuevo * 100) / 100; }
       closeModal();
       render();
+      saveDebt(deuda).then(function (ok) {
+        if (ok) { toast(liquidada ? "Deuda liquidada ✓" : "Deuda actualizada ✓"); return; }
+        deuda.amount = antesAmount; deuda.settled = antesSettled;
+        render();
+        avisoFallo("actualizar la deuda");
+      });
     });
 
     setTimeout(function () { var a = document.getElementById("adjAmount"); if (a) a.focus(); }, 250);
@@ -1255,8 +1458,39 @@ body { background: #FFFFFF; }
       '<h2>Mi cuenta</h2>' +
       '<div class="field"><label>Sesión iniciada como</label>' +
       '<div class="txt-input" style="background:var(--bg2);color:var(--muted)">' + esc(email) + '</div></div>' +
+
+      '<div class="field"><label>Ciudad <span style="font-weight:400;text-transform:none;letter-spacing:0">(sale en la cabecera)</span></label>' +
+      '<input id="pCiudad" class="txt-input" type="text" placeholder="p. ej. Aalsmeer" value="' + esc(perfil.ciudad) + '"></div>' +
+
+      '<div class="cat-hint">Si te has mudado y quieres comparar el antes y el después, pon aquí el nombre del sitio y la fecha. La pestaña <b>Evolución</b> separará las dos etapas. Si lo dejas vacío, verás simplemente todos los meses seguidos.</div>' +
+
+      '<div class="field"><label>Nombre de la etapa</label>' +
+      '<input id="pEtapaNombre" class="txt-input" type="text" placeholder="p. ej. Holanda" value="' + esc(perfil.etapaNombre) + '"></div>' +
+      '<div class="field"><label>Fecha en que empezó</label>' +
+      '<input id="pEtapaInicio" class="date-input" type="date" value="' + esc(perfil.etapaInicio || "") + '"></div>' +
+
+      '<div class="sheet-actions"><button class="btn save-btn" id="pSaveBtn" style="flex:1">Guardar ajustes</button></div>' +
       '<div class="sheet-actions"><button class="btn btn-ghost" id="logoutBtn" style="flex:1;color:var(--danger)">Cerrar sesión</button></div>';
     document.getElementById("modal").classList.remove("hidden");
+
+    document.getElementById("pSaveBtn").addEventListener("click", function () {
+      var btn = this;
+      var nuevo = {
+        ciudad: document.getElementById("pCiudad").value.trim(),
+        etapaNombre: document.getElementById("pEtapaNombre").value.trim(),
+        etapaInicio: document.getElementById("pEtapaInicio").value || null
+      };
+      var antes = { ciudad: perfil.ciudad, etapaNombre: perfil.etapaNombre, etapaInicio: perfil.etapaInicio };
+      btn.disabled = true;
+      perfil = nuevo;
+      savePerfil(nuevo).then(function (ok) {
+        btn.disabled = false;
+        if (ok) { closeModal(); render(); toast("Ajustes guardados ✓"); return; }
+        perfil = antes;
+        avisoFallo("guardar los ajustes");
+      });
+    });
+
     document.getElementById("logoutBtn").addEventListener("click", function () {
       sb.auth.signOut().then(function () {
         closeModal();
@@ -1268,7 +1502,7 @@ body { background: #FFFFFF; }
   function emptyState() {
     return '<div class="card"><div class="empty"><div class="big">🧾</div>' +
       '<p>Aún no hay movimientos en ' + monthName(viewMonth) + '.</p>' +
-      '<p class="hint">Pulsa <b>Añadir</b> o <b>Ticket, captura o PDF</b> para empezar.</p></div></div>';
+      '<p class="hint">Pulsa <b>Añadir gasto</b>, o <b>Pegar movimientos</b> si tienes el listado del banco.</p></div></div>';
   }
 
   function render() {
@@ -1316,8 +1550,8 @@ body { background: #FFFFFF; }
       '<div class="amount-input"><span>€</span><input id="fAmount" type="text" inputmode="decimal" placeholder="0,00" value="' + esc(amount) + '"></div>' +
       (opts.amountErr ? '<div class="note-err" style="margin-top:6px">' + esc(opts.amountErr) + "</div>" : "") +
       '</div>' +
-      '<div class="field" id="catField"' + (esIngreso ? ' style="display:none"' : '') + '><label style="display:flex;justify-content:space-between;align-items:center">Categoría <button type="button" class="deduce-btn" id="deduceBtn">🔎 Deducir del concepto</button></label><div class="cat-grid" id="catGrid">' + catGrid(formCat) + '</div></div>' +
-      '<div class="field"><label>Concepto (opcional)</label><input id="fNote" class="txt-input" type="text" placeholder="' + (esIngreso ? "p. ej. Sueldo" : "p. ej. Compra Jumbo") + '" value="' + esc(note) + '"></div>' +
+      '<div class="field" id="catField"' + (esIngreso ? ' style="display:none"' : '') + '><label>Categoría</label><div class="cat-grid" id="catGrid">' + catGrid(formCat) + '</div></div>' +
+      '<div class="field"><label>Concepto (opcional)</label><input id="fNote" class="txt-input" type="text" placeholder="' + (esIngreso ? "p. ej. Sueldo" : "p. ej. Compra del súper") + '" value="' + esc(note) + '"></div>' +
       '<div class="field"><label>Fecha</label><input id="fDate" class="date-input" type="date" value="' + esc(date) + '"></div>' +
       '<div class="sheet-actions">' +
       (editingId ? '<button class="btn del-btn" id="delBtn">🗑</button>' : "") +
@@ -1348,24 +1582,6 @@ body { background: #FFFFFF; }
     document.getElementById("saveBtn").addEventListener("click", saveFromModal);
     var del = document.getElementById("delBtn");
     if (del) del.addEventListener("click", deleteCurrent);
-    var deduce = document.getElementById("deduceBtn");
-    if (deduce) deduce.addEventListener("click", function () {
-      var txt = document.getElementById("fNote").value.trim();
-      if (!txt) { toast("Escribe primero el concepto"); document.getElementById("fNote").focus(); return; }
-      var btn = this, prev = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-sm"></span> Pensando…';
-      classifyFromText(txt, function (id) {
-        btn.disabled = false; btn.innerHTML = prev;
-        if (!id) { toast("No pude deducirlo"); return; }
-        formCat = id;
-        var grid = document.getElementById("catGrid");
-        if (grid) Array.prototype.forEach.call(grid.querySelectorAll(".cat-chip"), function (el) {
-          el.classList.toggle("on", el.getAttribute("data-cat") === id);
-        });
-        toast("Categoría: " + cat(id).label);
-      });
-    });
     if (!editingId && opts.categoryId === "sin_clasificar") {
       setTimeout(function () { var n = document.getElementById("fNote"); if (n) n.focus(); }, 250);
     } else if (!editingId && !opts.amount) {
@@ -1400,12 +1616,27 @@ body { background: #FFFFFF; }
 
     if (editingId) {
       var ex = expenses.find(function (x) { return x.id === editingId; });
-      if (ex) { ex.amount = amt; ex.categoryId = catFinal; ex.note = note; ex.date = date; ex.kind = formKind; }
-      saveExpense(ex).then(function() { toast(palabra + " actualizado ✓"); });
+      if (ex) {
+        // Se guarda el estado anterior para poder deshacerlo si Supabase lo rechaza
+        var antes = { amount: ex.amount, categoryId: ex.categoryId, note: ex.note, date: ex.date, kind: ex.kind };
+        ex.amount = amt; ex.categoryId = catFinal; ex.note = note; ex.date = date; ex.kind = formKind;
+        saveExpense(ex).then(function (ok) {
+          if (ok) { toast(palabra + " actualizado ✓"); return; }
+          ex.amount = antes.amount; ex.categoryId = antes.categoryId;
+          ex.note = antes.note; ex.date = antes.date; ex.kind = antes.kind;
+          render();
+          avisoFallo("guardar el cambio");
+        });
+      }
     } else {
       var newExp = { id: uid(), amount: amt, categoryId: catFinal, note: note, date: date, kind: formKind, createdAt: Date.now() };
       expenses.push(newExp);
-      saveExpense(newExp).then(function() { toast(palabra + " guardado ✓"); });
+      saveExpense(newExp).then(function (ok) {
+        if (ok) { toast(palabra + " guardado ✓"); return; }
+        expenses = expenses.filter(function (x) { return x.id !== newExp.id; });
+        render();
+        avisoFallo("guardar el " + palabra.toLowerCase());
+      });
     }
     var d = new Date(date + "T00:00:00");
     viewYear = d.getFullYear(); viewMonth = d.getMonth();
@@ -1416,135 +1647,40 @@ body { background: #FFFFFF; }
   function deleteCurrent() {
     if (!editingId) return;
     var idToDel = editingId;
+    var borrado = expenses.find(function (x) { return x.id === idToDel; });
     expenses = expenses.filter(function (x) { return x.id !== idToDel; });
-    deleteExpense(idToDel).then(function() { toast("Gasto eliminado"); });
     closeModal();
     render();
-  }
-
-  // ---------- Scan ticket via API ----------
-  function fileToBase64(file) {
-    return new Promise(function (resolve, reject) {
-      var r = new FileReader();
-      r.onload = function () {
-        var res = String(r.result);
-        var comma = res.indexOf(",");
-        resolve(comma > -1 ? res.slice(comma + 1) : res);
-      };
-      r.onerror = function () { reject(new Error("No se pudo leer la imagen")); };
-      r.readAsDataURL(file);
-    });
-  }
-
-  function scanPrompt() {
-    var ids = CATS.filter(function (c) { return c.id !== "sin_clasificar"; })
-      .map(function (c) { return c.id + " (" + c.label + ")"; }).join(", ");
-    return "Eres un asistente que registra gastos personales. El archivo puede ser: (a) un ticket o recibo de compra, (b) una captura de la app del banco, o (c) un PDF del extracto del banco (puede tener VARIAS páginas: procesa los movimientos de TODAS las páginas). " +
-      "Extrae SOLO los gastos (cargos, compras, pagos, salidas de dinero). Ignora ingresos, abonos, nóminas, devoluciones, transferencias y bizums recibidos. " +
-      "En el extracto del banco Santander: usa la 'Fecha operación' (NO la 'F. valor' que aparece debajo); el importe en NEGATIVO (con '-') es un gasto, el positivo es un ingreso y NO se apunta. " +
-      "Devuelve ÚNICAMENTE JSON válido, sin markdown ni texto extra, con esta forma exacta: " +
-      '{"movimientos":[{"importe": number, "fecha": "YYYY-MM-DD" | null, "concepto": "texto" | null, "categoria": "id" | null, "seguro": true | false}]}. ' +
-      "Reglas: importe siempre POSITIVO, número con punto decimal (ej. 12.45). " +
-      "fecha en formato YYYY-MM-DD si aparece, si no null. " +
-      "concepto = nombre del comercio o descripción del movimiento tal como aparece. " +
-      "categoria = el id que MEJOR encaje de esta lista: " + ids + ". " +
-      "El usuario vive en Aalsmeer (Países Bajos) y a veces gasta en Valencia (España). " +
-      "Si en un movimiento del banco aparece el nombre de un comercio o establecimiento que no reconoces (códigos tipo 'CCV*...', 'SUMUP*...', 'PAYPAL*...', nombres de tiendas o bares), USA la herramienta de búsqueda web para averiguar qué tipo de negocio es y dónde está, y así clasificarlo correctamente. " +
-      "Muchos cobros llevan un prefijo de la pasarela de pago antes de un asterisco (CCV*, SUMUP*, PAYPAL*, BCK*, GOC*, NYX*, etc.): el comercio real es lo que va DESPUÉS del asterisco; usa esa parte para identificarlo. " +
-      "'Www.Ovpay.Nl' y los códigos crípticos que empiezan por 'Nlov' son cobros del transporte público holandés (OV): clasifícalos como transporte. " +
-      'Pon "seguro": true SOLO si estás razonablemente seguro de la categoría (tras buscar si hace falta). ' +
-      'Si entiendes el gasto pero no encaja en ninguna categoría, usa "otros". ' +
-      'Si NO logras saber de qué es el gasto ni siquiera tras buscar (concepto críptico, ilegible o ambiguo), usa "categoria": null y "seguro": false. No inventes. ' +
-      "Si un ticket tiene un único total, devuelve un solo movimiento con ese total. " +
-      'Si no hay ningún gasto, devuelve {"movimientos":[]}. ' +
-      "IMPORTANTE: tu salida final debe ser ÚNICAMENTE el objeto JSON, sin ningún texto antes ni después.";
-  }
-
-  function callVisionAPI(file) {
-    return fileToBase64(file).then(function (b64) {
-      var isPdf = (file.type === "application/pdf") || /\.pdf$/i.test(file.name || "");
-      var media = isPdf
-        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }
-        : { type: "image", source: { type: "base64", media_type: (file.type && file.type.indexOf("image/") === 0 ? file.type : "image/jpeg"), data: b64 } };
-      return fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 8000,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-          messages: [{
-            role: "user",
-            content: [ media, { type: "text", text: scanPrompt() } ]
-          }]
-        })
-      });
-    }).then(function (res) { return res.json(); });
-  }
-
-  function extractJsonObject(text) {
-    if (!text) return "{}";
-    var key = text.indexOf('"movimientos"');
-    if (key > -1) {
-      var start = text.lastIndexOf("{", key);
-      var end = text.lastIndexOf("}");
-      if (start > -1 && end > start) return text.slice(start, end + 1);
-    }
-    var m = text.match(/\{[\s\S]*\}/);
-    return m ? m[0] : "{}";
-  }
-
-  function mapMovement(m) {
-    var amt = (typeof m.importe === "number") ? m.importe : parseAmount(m.importe);
-    amt = Math.abs(amt);
-    var clear = m.categoria && CAT_MAP[m.categoria] && m.categoria !== "sin_clasificar" && m.seguro === true;
-    return {
-      amount: amt,
-      date: m.fecha || todayISO(),
-      note: m.concepto || "",
-      categoryId: clear ? m.categoria : "sin_clasificar"
-    };
-  }
-
-  function handleScan(file) {
-    if (!file) return;
-    openModal({ statusHTML: '<div class="scan-status"><div class="spinner"></div><div>Analizando la imagen y buscando los establecimientos… puede tardar unos segundos.</div></div>', date: todayISO() });
-    callVisionAPI(file).then(function (data) {
-      if (!data || data.error || !data.content) throw new Error("respuesta vacía");
-      var text = data.content.map(function (b) { return b.type === "text" ? b.text : ""; }).join("\n");
-      var clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      var parsed = JSON.parse(extractJsonObject(clean));
-      var list = (parsed.movimientos || []).map(mapMovement).filter(function (x) { return x.amount > 0; });
-
-      if (list.length === 0) {
-        openModal({ date: todayISO(), statusHTML: '<div class="scan-status"><div>No detecté ningún gasto en la imagen. Rellénalo a mano.</div></div>' });
-      } else if (list.length === 1) {
-        var x = list[0];
-        var dup = isDuplicate(x);
-        var unclear = x.categoryId === "sin_clasificar";
-        var statusHTML = dup
-          ? '<div class="scan-status" style="background:#FFF8E1;color:#7A5C00"><div>⚠ Este gasto parece que ya está guardado (misma fecha e importe). Revísalo antes de guardar.</div></div>'
-          : (unclear
-              ? '<div class="scan-status"><div>Leí el importe, pero no tengo claro de qué es. Escribe el concepto y pulsa "Deducir", o elige la categoría.</div></div>'
-              : '<div class="scan-status" style="background:var(--income-soft);color:#15803D"><div>✓ Leído y clasificado. Revisa y guarda.</div></div>');
-        openModal({ amount: x.amount, date: x.date, note: x.note, categoryId: x.categoryId, statusHTML: statusHTML });
-      } else {
-        openMultiReview(list);
-      }
-    }).catch(function (err) {
-      console.error("scan error", err);
-      openModal({ date: todayISO(), statusHTML: '<div class="scan-status"><div>No pude leer la imagen automáticamente. Rellénalo a mano.</div></div>' });
+    deleteExpense(idToDel).then(function (ok) {
+      if (ok) { toast("Movimiento eliminado"); return; }
+      // No se pudo borrar en el servidor: se devuelve a la lista
+      if (borrado) expenses.push(borrado);
+      render();
+      avisoFallo("borrar el movimiento");
     });
   }
 
   // ---------- Anti-duplicados ----------
-  function isDuplicate(candidate) {
-    var matchCount = expenses.filter(function (e) {
-      return e.date === candidate.date && Math.abs(e.amount - candidate.amount) < 0.02;
+  // Cuántos movimientos YA guardados coinciden en la misma fecha y el mismo importe.
+  // La tolerancia es de medio céntimo: así 4,99 y 5,00 se consideran distintos
+  // (antes se usaba 0,02 y los daba por iguales).
+  function contarYaGuardados(fecha, importe) {
+    return expenses.filter(function (e) {
+      return e.date === fecha && Math.abs(e.amount - importe) < 0.005;
     }).length;
-    if (matchCount === 0) return false;
-    // Si ya hay tantas instancias como las que hay en el candidato, es duplicado
-    return true;
+  }
+
+  // Marca cuáles del lote que se está importando son duplicados de verdad.
+  // Va contando las repeticiones dentro del propio lote: si un día hubo tres
+  // cafés de 0,50 € y solo uno está guardado, el primero se marca como duplicado
+  // y los otros dos entran como nuevos.
+  function marcarDuplicados(lista) {
+    var vistos = {};
+    return lista.map(function (x) {
+      var clave = x.date + "|" + x.amount.toFixed(2);
+      vistos[clave] = (vistos[clave] || 0) + 1;
+      return { item: x, dup: contarYaGuardados(x.date, x.amount) >= vistos[clave] };
+    });
   }
 
   // ---------- Multi-movement review ----------
@@ -1557,8 +1693,8 @@ body { background: #FFFFFF; }
   function openMultiReview(list) {
     editingId = null;
     var newItems = [], dupItems = [];
-    list.forEach(function (x) {
-      if (isDuplicate(x)) dupItems.push(x); else newItems.push(x);
+    marcarDuplicados(list).forEach(function (r) {
+      if (r.dup) dupItems.push(r.item); else newItems.push(r.item);
     });
     var nUnclear = newItems.filter(function (x) { return x.categoryId === "sin_clasificar"; }).length;
 
@@ -1680,36 +1816,20 @@ body { background: #FFFFFF; }
     if (toSave.length === 0) { toast("Revisa los importes"); return; }
     var d = new Date(lastDate + "T00:00:00");
     viewYear = d.getFullYear(); viewMonth = d.getMonth();
-    // Guardar todos de golpe en Supabase
-    var rows2save = toSave.map(function(exp) {
-      return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind };
-    });
-    sb.from("gastos").upsert(rows2save).then(function(res) {
-      if (res.error) { console.error("addAllFromReview", res.error); toast("Error al guardar 😕"); return; }
-      toast(toSave.length + (toSave.length > 1 ? " gastos añadidos ✓" : " gasto añadido ✓"));
-    });
     closeModal(); render();
-  }
-
-  // ---------- Classify from text ----------
-  function classifyFromText(text, onDone) {
-    var ids = CATS.filter(function (c) { return c.id !== "sin_clasificar"; }).map(function (c) { return c.id + " (" + c.label + ")"; }).join(", ");
-    fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        messages: [{ role: "user", content: 'Clasifica este gasto en una categoría. Concepto: "' + text + '". El usuario vive en Aalsmeer (Países Bajos). Si el concepto es un nombre de comercio o establecimiento que no reconoces, busca en la web qué tipo de negocio es. Categorías (id y significado): ' + ids + '. Tu última palabra debe ser SOLO el id que mejor encaje. Si no encaja en ninguna, responde otros.' }]
-      })
-    }).then(function (r) { return r.json(); }).then(function (data) {
-      var t = (data.content || []).map(function (b) { return b.type === "text" ? b.text : ""; }).join(" ").toLowerCase();
-      var tokens = t.split(/[^a-z_]+/).filter(Boolean);
-      var found = "otros";
-      for (var i = tokens.length - 1; i >= 0; i--) { if (CAT_MAP[tokens[i]] && tokens[i] !== "sin_clasificar") { found = tokens[i]; break; } }
-      onDone(found);
-    }).catch(function () { onDone(null); });
+    // Se guardan todos de golpe. Si Supabase lo rechaza, se quitan de la pantalla:
+    // más vale que desaparezcan y se vuelvan a pegar que creer que están guardados.
+    saveExpenses(toSave).then(function (ok) {
+      if (ok) {
+        toast(toSave.length + (toSave.length > 1 ? " movimientos añadidos ✓" : " movimiento añadido ✓"));
+        return;
+      }
+      var quitar = {};
+      toSave.forEach(function (e) { quitar[e.id] = true; });
+      expenses = expenses.filter(function (e) { return !quitar[e.id]; });
+      render();
+      avisoFallo("guardar los movimientos");
+    });
   }
 
   // ---------- Paste movements (from chat) ----------
@@ -1825,11 +1945,6 @@ body { background: #FFFFFF; }
     document.getElementById("accountBtn").addEventListener("click", openAccountSheet);
     document.getElementById("addBtn").addEventListener("click", function () { openModal({}); });
     document.getElementById("pasteBtn").addEventListener("click", openPasteSheet);
-    document.getElementById("scanInput").addEventListener("change", function (ev) {
-      var f = ev.target.files && ev.target.files[0];
-      this.value = "";
-      handleScan(f);
-    });
     document.getElementById("scrim").addEventListener("click", closeModal);
     document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
     // Detalle de día (Calendario): tocar un movimiento lo abre para editar. Un único escuchador, no se acumula.
@@ -1851,8 +1966,13 @@ body { background: #FFFFFF; }
         var deuda = debts.find(function (x) { return x.id === sId; });
         if (deuda) {
           deuda.settled = true;
-          saveDebt(deuda).then(function () { toast("Marcada como pagada ✓"); });
           render();
+          saveDebt(deuda).then(function (ok) {
+            if (ok) { toast("Marcada como pagada ✓"); return; }
+            deuda.settled = false;
+            render();
+            avisoFallo("marcarla como pagada");
+          });
         }
         return;
       }
@@ -1865,8 +1985,13 @@ body { background: #FFFFFF; }
         var etiqueta2 = deuda2 ? deuda2.persona : "esta deuda";
         if (window.confirm("¿Borrar la deuda con \"" + etiqueta2 + "\"?")) {
           debts = debts.filter(function (x) { return x.id !== ddId; });
-          deleteDebt(ddId).then(function () { toast("Deuda eliminada"); });
           render();
+          deleteDebt(ddId).then(function (ok) {
+            if (ok) { toast("Deuda eliminada"); return; }
+            if (deuda2) debts.push(deuda2);
+            render();
+            avisoFallo("borrar la deuda");
+          });
         }
         return;
       }
@@ -1896,8 +2021,13 @@ body { background: #FFFFFF; }
         var etiqueta = mov ? (mov.note || cat(mov.categoryId).label) : "este movimiento";
         if (window.confirm("¿Borrar \"" + etiqueta + "\"?")) {
           expenses = expenses.filter(function (x) { return x.id !== delId; });
-          deleteExpense(delId).then(function () { toast("Movimiento eliminado"); });
           render();
+          deleteExpense(delId).then(function (ok) {
+            if (ok) { toast("Movimiento eliminado"); return; }
+            if (mov) expenses.push(mov);
+            render();
+            avisoFallo("borrar el movimiento");
+          });
         }
         return;
       }
