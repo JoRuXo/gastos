@@ -134,13 +134,23 @@ Antes había 4 repos separados (uno por persona), todos con código idéntico sa
 - **`.gitignore`:** bloquea basura del sistema (`Thumbs.db`, `.DS_Store`, etc.).
 - **Identidad de git al commitear:** nombre `Noel`, email `JoRuXo@hotmail.com`.
 
-## Importar movimientos desde PDF (automático)
-Alberto puede mandar un PDF de extracto bancario y decir «mételos»: Claude inserta los movimientos **directamente en Supabase, solo en la cuenta de Alberto** (cada usuario tiene sus filas separadas por `user_id`; los amigos no se ven afectados jamás). Reglas:
-- **Antiduplicados obligatorio:** saltar lo que ya exista con misma fecha+importe (comparación directa contra sus filas de `gastos`).
-- **Excluir** movimientos internos: transferencias a su propia cuenta, retrocesiones, anulaciones (netear con su cargo gemelo), traspasos, y Endesa + reembolsos de luz de la familia.
+## Importar movimientos desde extractos (automático)
+Alberto puede mandar un extracto y decir «mételos»: Claude inserta los movimientos **directamente en Supabase, solo en la cuenta de Alberto** (cada usuario tiene sus filas separadas por `user_id`; los amigos no se ven afectados jamás).
+
+**Sus dos bancos (desde julio 2026):** Santander (PDF «Listado de movimientos») y **Trade Republic** (CSV «Exportación de transacción»). Ambos van a la misma cuenta de la app; no hay campo de banco.
+
+Reglas:
+- **Antiduplicados obligatorio:** saltar lo que ya exista con misma fecha+importe. **Pero no basta:** Alberto a veces apunta gastos a mano con **fecha distinta a la del banco**, así que hay que listar sus apuntes del rango y cruzarlos también por importe en una ventana de ±5 días.
+- **Traspasos entre sus propias cuentas:** una transferencia que sale del Santander aparece como ingreso en Trade Republic. Excluir **los dos lados** o salen gasto e ingreso fantasma.
+- **Excluir** además: retrocesiones, anulaciones (netear con su cargo gemelo), y Endesa + reembolsos de luz de la familia.
 - **Ingresos** → `kind='ingreso'` (la app los pone en `otros`). Sueldos y transferencias de familia = ingreso.
 - **Categorías:** respetar los criterios habituales de Alberto (algunos son discretos y NO se documentan aquí; ver nota de privacidad). Ante una categoría dudosa, dejarla en `sin_clasificar` o preguntar.
 - Al terminar, dar un resumen de lo insertado y avisar de los apuntes dudosos para que Alberto los confirme.
+
+## Si la app deja de funcionar: Supabase se pausa solo
+El proyecto Supabase es de plan gratuito y **se pausa tras ~2 semanas sin actividad**; mientras está pausado **la app no funciona para nadie** (ni Alberto ni sus amigos pueden entrar). Pasó el 26 jul 2026.
+
+Se arregla reactivando el proyecto (`restore_project`): es gratis, no se pierde nada y tarda 2-4 minutos. Para prevenirlo, basta con abrir la app cada una o dos semanas.
 
 ## Cómo desplegar cambios
 1. Editar `index.html` (y `sw.js` si se sube versión de caché).
@@ -174,3 +184,7 @@ Alberto puede mandar un PDF de extracto bancario y decir «mételos»: Claude in
 ### 3 jul 2026
 - **Categoría nueva `estudios`** (📚, `#3F7E7A`) añadida al array `CATS`.
 - **Unificación a un solo repositorio:** se creó el repo `gastos` (URL `https://joruxo.github.io/gastos/`) como app única para las 4 personas. Cada uno entra con su cuenta (RLS separa datos). Los 4 repos viejos pasan a ser redirecciones con service worker autodesinstalable. Caché subida a `v12`. `storageKey` unificada a `sb-gastos-auth`.
+
+### 26 jul 2026
+- **El proyecto Supabase se había auto-pausado** por 3 semanas sin uso y la app estaba caída; se reactivó. Ver sección «Si la app deja de funcionar».
+- **Alberto abrió cuenta en Trade Republic**: ahora manda dos extractos (Santander PDF + Trade Republic CSV). Se documentaron las dos trampas nuevas del antiduplicados (fechas manuales distintas a las del banco, y traspasos entre sus propias cuentas).
