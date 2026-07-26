@@ -187,4 +187,6 @@ Se arregla reactivando el proyecto (`restore_project`): es gratis, no se pierde 
 
 ### 26 jul 2026
 - **El proyecto Supabase se había auto-pausado** por 3 semanas sin uso y la app estaba caída; se reactivó. Ver sección «Si la app deja de funcionar».
+- **Tarea automática anti-pausa:** `.github/workflows/mantener-despierta.yml` consulta la base de datos a diario (y avisa por email si falla), con un commit mensual a `.keepalive` para que GitHub no desactive la tarea por inactividad del repo.
+- **Redirecciones aplicadas a los 4 repos viejos** (ya estaban descritas arriba; se ejecutaron este día). Cada uno lleva ahora la página de redirección y el service worker autodestructivo. El `CLAUDE.md` de `gastos-Joruxo` se sustituyó por un aviso de repo retirado.
 - **Alberto abrió cuenta en Trade Republic**: ahora manda dos extractos (Santander PDF + Trade Republic CSV). Se documentaron las dos trampas nuevas del antiduplicados (fechas manuales distintas a las del banco, y traspasos entre sus propias cuentas).
