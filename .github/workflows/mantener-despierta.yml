@@ -1,0 +1,61 @@
+# Mantiene la app operativa.
+#
+# Supabase apaga los proyectos del plan gratuito cuando pasan ~1-2 semanas sin
+# actividad, y mientras está apagado la app no funciona para nadie. Esta tarea
+# hace todos los días una consulta mínima a la base de datos, así Supabase la ve
+# activa y no la pausa nunca.
+#
+# Si algún día la consulta falla, GitHub manda un email avisando: eso significa
+# que algo va mal con la base de datos y hay que mirarlo.
+#
+# La clave que aparece abajo es la "publishable key", la misma que ya está dentro
+# de index.html. Está pensada para ir en el navegador, no es secreta.
+
+name: Mantener la app despierta
+
+on:
+  schedule:
+    # Todos los días a las 06:17 UTC (GitHub puede retrasarlo unos minutos)
+    - cron: "17 6 * * *"
+  # Permite lanzarla a mano desde la pestaña Actions de GitHub
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GitHub desactiva las tareas programadas si el repositorio pasa 60 días
+      # sin ningún cambio. Este paso escribe el mes actual en un fichero, así que
+      # genera un único commit al mes: suficiente para que nunca se desactive.
+      - name: Marcar actividad en el repositorio (1 vez al mes)
+        run: |
+          date -u +"Ultimo mes con actividad automatica: %Y-%m" > .keepalive
+          git config user.name "Noel"
+          git config user.email "JoRuXo@hotmail.com"
+          git add .keepalive
+          if git diff --staged --quiet; then
+            echo "Ya hay actividad este mes, no hace falta commit."
+          else
+            git commit -m "chore: mantener activa la tarea programada ($(date -u +%Y-%m))"
+            git push
+          fi
+
+      - name: Despertar la base de datos
+        env:
+          SUPABASE_URL: https://zlsuswrmzyecktkiwymi.supabase.co
+          SUPABASE_KEY: sb_publishable_qoTvP530FWlfg1xwrdRxHg_oph9AfVf
+        run: |
+          code=$(curl -s -m 30 -o /dev/null -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/gastos?select=id&limit=1")
+          echo "Supabase respondio: HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::La base de datos no responde (HTTP $code). Puede estar pausada."
+            exit 1
+          fi
+          echo "Base de datos despierta y funcionando."
