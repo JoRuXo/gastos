@@ -256,6 +256,7 @@ body { background: #FFFFFF; }
 }
 .btn, .tabs button, .icon-btn, .cat-chip { user-select: none; -webkit-user-select: none; }
 .txt-input:focus, .date-input:focus, .amount-input:focus-within { border-color: var(--primary); }
+select.txt-input { -webkit-appearance: none; appearance: none; background: var(--surface); }
 .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .cat-chip {
   display: flex; align-items: center; gap: 8px; padding: 10px 11px; border-radius: 12px;
@@ -504,6 +505,8 @@ body { background: #FFFFFF; }
     <div class="foot">
       <div class="foot-actions">
         <button id="pasteBtn" class="foot-link"><span class="ic">📋</span><span>Pegar movimientos</span><span class="ch">›</span></button>
+        <button id="fijosBtn" class="foot-link"><span class="ic">📌</span><span>Mis gastos fijos</span><span class="ch">›</span></button>
+        <button id="presupBtn" class="foot-link"><span class="ic">🎯</span><span>Presupuestos</span><span class="ch">›</span></button>
         <button id="exportBtn2" class="foot-link"><span class="ic">⬇️</span><span>Exportar copia (CSV)</span><span class="ch">›</span></button>
         <button id="delMonthBtn" class="foot-link danger"><span class="ic">🗑</span><span>Borrar movimientos del mes</span><span class="ch">›</span></button>
       </div>
@@ -565,7 +568,9 @@ body { background: #FFFFFF; }
   var expenses = [];
   var debts = [];
   // Ajustes propios de quien ha entrado. Vacíos = comportamiento genérico.
-  var perfil = { ciudad: "", etapaNombre: "", etapaInicio: null };
+  var perfil = { ciudad: "", etapaNombre: "", etapaInicio: null, cuentas: [] };
+  var fijos = [];          // cuotas mensuales — SOLO previsión, no crean movimientos
+  var presupuestos = {};   // categoryId -> límite mensual en euros
   var view = "resumen";
   var now = new Date();
   var viewYear = now.getFullYear();
@@ -573,6 +578,9 @@ body { background: #FFFFFF; }
   var editingId = null;
   var formCat = "super";
   var formKind = "gasto";
+  var formCuenta = "";
+  var cuentaLote = "";     // cuenta elegida al pegar un extracto entero
+  var busqueda = "";       // texto del buscador de Movimientos
   var openCats = {};
 
   // ---------- Helpers ----------
@@ -745,7 +753,7 @@ body { background: #FFFFFF; }
       if (session && session.user) {
         currentUser = session.user;
         hideLogin();
-        Promise.all([loadPerfil(), loadData(), loadDebts()]).then(function(r) {
+        Promise.all([loadPerfil(), loadData(), loadDebts(), loadFijos(), loadPresupuestos()]).then(function(r) {
           render();
           // Si la carga falla, avisar en vez de mostrar la app vacía como si no
           // hubiera nada guardado.
@@ -755,7 +763,9 @@ body { background: #FFFFFF; }
         currentUser = null;
         expenses = [];
         debts = [];
-        perfil = { ciudad: "", etapaNombre: "", etapaInicio: null };
+        fijos = [];
+        presupuestos = {};
+        perfil = { ciudad: "", etapaNombre: "", etapaInicio: null, cuentas: [] };
         showLogin();
       }
     });
@@ -771,12 +781,12 @@ body { background: #FFFFFF; }
     return false;
   }
   function avisoFallo(accion) {
-    toast("No se pudo " + accion + ". Revisa la conexión ⚠");
+    toast("No se ha podido " + accion + ". Revisa la conexión ⚠");
   }
 
   // Convierte del formato interno de la app al formato de Supabase
   function filaGasto(exp) {
-    return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind || "gasto" };
+    return { id: exp.id, amount: exp.amount, category_id: exp.categoryId, note: exp.note || "", date: exp.date, kind: exp.kind || "gasto", cuenta: exp.cuenta || "" };
   }
 
   function loadData() {
@@ -785,7 +795,7 @@ body { background: #FFFFFF; }
       .then(function(res) {
         if (res.error) return fallo("loadData", res.error);
         expenses = (res.data || []).map(function(r) {
-          return { id: r.id, amount: r.amount, categoryId: r.category_id, note: r.note || "", date: r.date, kind: r.kind || "gasto", createdAt: new Date(r.created_at).getTime() };
+          return { id: r.id, amount: r.amount, categoryId: r.category_id, note: r.note || "", date: r.date, kind: r.kind || "gasto", cuenta: r.cuenta || "", createdAt: new Date(r.created_at).getTime() };
         });
         return true;
       }, function (err) { return fallo("loadData", err); });
@@ -869,7 +879,8 @@ body { background: #FFFFFF; }
         perfil = {
           ciudad: (p && p.ciudad) || "",
           etapaNombre: (p && p.etapa_nombre) || "",
-          etapaInicio: (p && p.etapa_inicio) || null
+          etapaInicio: (p && p.etapa_inicio) || null,
+          cuentas: (p && p.cuentas) || []
         };
         return true;
       }, function (err) { return fallo("loadPerfil", err); });
@@ -881,11 +892,68 @@ body { background: #FFFFFF; }
       ciudad: nuevo.ciudad || "",
       etapa_nombre: nuevo.etapaNombre || "",
       etapa_inicio: nuevo.etapaInicio || null,
+      cuentas: nuevo.cuentas || [],
       updated_at: new Date().toISOString()
     };
     return sb.from("perfiles").upsert(row).then(function(res) {
       return res.error ? fallo("savePerfil", res.error) : true;
     }, function (err) { return fallo("savePerfil", err); });
+  }
+
+  // ---------- Gastos fijos (Supabase) ----------
+  // OJO: los fijos son SOLO previsión. No generan movimientos ni cuentan en los
+  // totales del mes. Sirven para saber cuánto del mes está ya comprometido en
+  // cuotas. Los movimientos de verdad siguen llegando del extracto del banco.
+  function loadFijos() {
+    if (!currentUser) return Promise.resolve(true);
+    return sb.from("fijos").select("*").order("amount", { ascending: false })
+      .then(function (res) {
+        if (res.error) return fallo("loadFijos", res.error);
+        fijos = (res.data || []).map(function (r) {
+          return { id: r.id, concepto: r.concepto || "", amount: r.amount, categoryId: r.category_id || "otros",
+                   dia: r.dia, cuenta: r.cuenta || "", activo: r.activo !== false };
+        });
+        return true;
+      }, function (err) { return fallo("loadFijos", err); });
+  }
+
+  function saveFijo(f) {
+    var row = { id: f.id, amount: f.amount, concepto: f.concepto || "", category_id: f.categoryId || "otros",
+                dia: f.dia == null ? null : f.dia, cuenta: f.cuenta || "", activo: f.activo !== false };
+    return sb.from("fijos").upsert(row).then(function (res) {
+      return res.error ? fallo("saveFijo", res.error) : true;
+    }, function (err) { return fallo("saveFijo", err); });
+  }
+
+  function deleteFijo(id) {
+    return sb.from("fijos").delete().eq("id", id).then(function (res) {
+      return res.error ? fallo("deleteFijo", res.error) : true;
+    }, function (err) { return fallo("deleteFijo", err); });
+  }
+
+  // ---------- Presupuestos por categoría (Supabase) ----------
+  function loadPresupuestos() {
+    if (!currentUser) return Promise.resolve(true);
+    return sb.from("presupuestos").select("*")
+      .then(function (res) {
+        if (res.error) return fallo("loadPresupuestos", res.error);
+        presupuestos = {};
+        (res.data || []).forEach(function (r) { presupuestos[r.category_id] = r.importe; });
+        return true;
+      }, function (err) { return fallo("loadPresupuestos", err); });
+  }
+
+  function savePresupuesto(categoryId, importe) {
+    var row = { user_id: currentUser.id, category_id: categoryId, importe: importe, updated_at: new Date().toISOString() };
+    return sb.from("presupuestos").upsert(row).then(function (res) {
+      return res.error ? fallo("savePresupuesto", res.error) : true;
+    }, function (err) { return fallo("savePresupuesto", err); });
+  }
+
+  function deletePresupuesto(categoryId) {
+    return sb.from("presupuestos").delete().eq("category_id", categoryId).then(function (res) {
+      return res.error ? fallo("deletePresupuesto", res.error) : true;
+    }, function (err) { return fallo("deletePresupuesto", err); });
   }
 
   // ---------- Selectors / computations ----------
@@ -953,10 +1021,10 @@ body { background: #FFFFFF; }
   function renderResumen() {
     var me = monthGastos();
     var content = document.getElementById("content");
-    if (me.length === 0 && monthIngresos().length === 0) { content.innerHTML = emptyState(); return; }
+    if (me.length === 0 && monthIngresos().length === 0) { content.innerHTML = emptyState() + tarjetaPresupuestos() + tarjetaFijos(); return; }
     if (me.length === 0) {
       content.innerHTML = '<div class="card"><div class="empty"><div class="big">💰</div>' +
-        '<p>Este mes solo hay ingresos, ningún gasto todavía.</p></div></div>';
+        '<p>Este mes solo hay ingresos, ningún gasto todavía.</p></div></div>' + tarjetaPresupuestos() + tarjetaFijos();
       return;
     }
 
@@ -995,19 +1063,48 @@ body { background: #FFFFFF; }
     content.innerHTML =
       '<div class="card"><h3>¿En qué se va?</h3>' +
       '<div class="donut-wrap">' + donutSVG(cats, total) + '<div class="legend">' + legend + '</div></div></div>' +
-      '<div class="card"><h3>Desglose por categoría <span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· toca para ver</span></h3>' + bars + '</div>';
+      '<div class="card"><h3>Desglose por categoría <span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· toca para ver</span></h3>' + bars + '</div>' +
+      tarjetaPresupuestos() + tarjetaFijos();
   }
 
   // ---------- Render: movimientos ----------
-  function renderMovimientos() {
-    var me = monthExpenses().slice().sort(function (a, b) {
+  // Con el buscador vacío se ven los movimientos del mes que estás viendo.
+  // En cuanto escribes algo, busca en TODOS los meses (que es para lo que sirve).
+  // Quita acentos y pasa a minúsculas, para que buscar "cafe" encuentre "café"
+  // y "peluqueria" encuentre "Peluquería".
+  function sinAcentos(txt) {
+    return String(txt == null ? "" : txt).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function movimientosFiltrados() {
+    var q = sinAcentos(busqueda.trim());
+    if (!q) return monthExpenses();
+    return expenses.filter(function (e) {
+      var c = cat(e.categoryId);
+      return sinAcentos(e.note).indexOf(q) > -1 ||
+             sinAcentos(c.label).indexOf(q) > -1 ||
+             sinAcentos(e.cuenta).indexOf(q) > -1 ||
+             String(e.amount).replace(".", ",").indexOf(q) > -1;
+    });
+  }
+
+  function listaMovimientosHTML() {
+    var buscando = busqueda.trim().length > 0;
+    var me = movimientosFiltrados().slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
-    var content = document.getElementById("content");
-    if (me.length === 0) { content.innerHTML = emptyState(); return; }
 
-    var html = '<div class="edit-hint">✎ Toca para editar · 🗑 para borrar</div>', curDay = null;
+    if (me.length === 0) {
+      return buscando
+        ? '<div class="card"><div class="empty"><div class="big">🔍</div><p>No hay ningún movimiento que coincida con «' + esc(busqueda.trim()) + '».</p></div></div>'
+        : emptyState();
+    }
+
+    var html = buscando
+      ? '<div class="rev-count">' + me.length + (me.length === 1 ? " resultado" : " resultados") + ' en todos los meses</div>'
+      : '<div class="edit-hint">✎ Toca para editar · 🗑 para borrar</div>';
+    var curDay = null;
     me.forEach(function (e) {
       if (e.date !== curDay) {
         if (curDay !== null) html += "</div>";
@@ -1018,7 +1115,7 @@ body { background: #FFFFFF; }
       var c = cat(e.categoryId);
       var ico = esIngreso ? "💰" : c.emoji;
       var icoBg = esIngreso ? "var(--income-soft)" : c.color + "22";
-      var sub = esIngreso ? "Ingreso" : c.label;
+      var sub = (esIngreso ? "Ingreso" : c.label) + (e.cuenta ? " · " + e.cuenta : "");
       var amtTxt = esIngreso ? ("+" + eur(e.amount)) : eur(e.amount);
       var amtColor = esIngreso ? ' style="color:var(--income)"' : '';
       html += '<div class="item" data-id="' + e.id + '">' +
@@ -1029,7 +1126,23 @@ body { background: #FFFFFF; }
         '<button class="item-del" data-del-id="' + e.id + '" aria-label="Borrar">🗑</button></div>';
     });
     if (curDay !== null) html += "</div>";
-    content.innerHTML = html;
+    return html;
+  }
+
+  function renderMovimientos() {
+    var content = document.getElementById("content");
+    content.innerHTML =
+      '<div style="margin-bottom:12px"><input id="buscador" class="txt-input" type="search" ' +
+      'placeholder="🔍 Buscar concepto, categoría, importe…" value="' + esc(busqueda) + '"></div>' +
+      '<div id="movList">' + listaMovimientosHTML() + '</div>';
+
+    // Solo se repinta la lista al escribir, no la caja de búsqueda: así no se
+    // pierde el foco ni la posición del cursor mientras se teclea.
+    var caja = document.getElementById("buscador");
+    caja.addEventListener("input", function () {
+      busqueda = this.value;
+      document.getElementById("movList").innerHTML = listaMovimientosHTML();
+    });
   }
 
   // ---------- Render: evolución ----------
@@ -1199,7 +1312,7 @@ body { background: #FFFFFF; }
           return '<div class="item" data-id="' + e.id + '">' +
             '<div class="ico" style="background:' + (esIng ? "var(--income-soft)" : c.color + "22") + '">' + (esIng ? "💰" : c.emoji) + '</div>' +
             '<div class="mid"><div class="t">' + esc(e.note || (esIng ? "Ingreso" : c.label)) + '</div>' +
-            '<div class="s">' + (esIng ? "Ingreso" : esc(c.label)) + '</div></div>' +
+            '<div class="s">' + esc((esIng ? "Ingreso" : c.label) + (e.cuenta ? " · " + e.cuenta : "")) + '</div></div>' +
             '<div class="amt"' + (esIng ? ' style="color:var(--income)"' : '') + '>' + (esIng ? "+" : "") + eur(e.amount) + '</div></div>';
         }).join("");
 
@@ -1449,6 +1562,274 @@ body { background: #FFFFFF; }
     setTimeout(function () { var a = document.getElementById("adjAmount"); if (a) a.focus(); }, 250);
   }
 
+  // ---------- Gastos fijos: solo previsión ----------
+  // Empareja cada cuota fija con un movimiento real del mes que se está viendo.
+  // Se compara por importe (las cuotas suelen tener importes distintivos) y se
+  // va "consumiendo" cada movimiento, para que dos cuotas del mismo importe no
+  // se emparejen las dos con el mismo cargo.
+  function estadoFijos() {
+    var delMes = monthGastos();
+    var usados = {};
+    var lista = fijos.filter(function (f) { return f.activo; }).map(function (f) {
+      var mov = null;
+      for (var i = 0; i < delMes.length; i++) {
+        if (usados[delMes[i].id]) continue;
+        if (Math.abs(delMes[i].amount - f.amount) < 0.005) { mov = delMes[i]; break; }
+      }
+      if (mov) usados[mov.id] = true;
+      return { fijo: f, cobrado: !!mov };
+    });
+    var total = 0, cobrado = 0;
+    lista.forEach(function (x) { total += x.fijo.amount; if (x.cobrado) cobrado += x.fijo.amount; });
+    return { lista: lista, total: total, cobrado: cobrado, pendiente: total - cobrado };
+  }
+
+  // Tarjeta que se pinta en Resumen
+  function tarjetaFijos() {
+    var est = estadoFijos();
+    if (est.lista.length === 0) return "";
+    var pct = est.total > 0 ? (est.cobrado / est.total * 100) : 0;
+    var quedaTrasFijos = sum(monthIngresos()) - sum(monthGastos()) - est.pendiente;
+
+    var pendientes = est.lista.filter(function (x) { return !x.cobrado; });
+    var listaPend = pendientes.length === 0
+      ? '<div style="font-size:12.5px;color:var(--income);margin-top:10px">✓ Ya han pasado todas las cuotas de este mes.</div>'
+      : '<div style="margin-top:11px;border-top:1px solid var(--line);padding-top:9px">' +
+        pendientes.map(function (x) {
+          var c = cat(x.fijo.categoryId);
+          return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px">' +
+            '<span>' + c.emoji + '</span>' +
+            '<span style="flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(x.fijo.concepto || c.label) + (x.fijo.dia ? ' · día ' + x.fijo.dia : '') + '</span>' +
+            '<span style="font-weight:600;font-variant-numeric:tabular-nums">' + eur(x.fijo.amount) + '</span></div>';
+        }).join("") + '</div>';
+
+    return '<div class="card"><h3>📌 Gastos fijos del mes ' +
+      '<span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· previsión</span></h3>' +
+      '<div style="display:flex;gap:10px;margin-bottom:11px">' +
+      '<div style="flex:1;background:var(--bg2);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.04em">Total</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700">' + eurShort(est.total) + '</div></div>' +
+      '<div style="flex:1;background:var(--income-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#15803D;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Ya pasaron</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--income)">' + eurShort(est.cobrado) + '</div></div>' +
+      '<div style="flex:1;background:var(--expense-soft);border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#B91C1C;text-transform:uppercase;font-weight:700;letter-spacing:.04em">Pendiente</div><div style="font-family:\'Fraunces\',serif;font-size:16px;font-weight:700;color:var(--expense)">' + eurShort(est.pendiente) + '</div></div>' +
+      '</div>' +
+      '<div class="catbar-track"><div class="catbar-fill" style="width:' + pct.toFixed(1) + '%;background:var(--income)"></div></div>' +
+      (est.pendiente > 0
+        ? '<div style="margin-top:11px;font-size:12.5px;color:var(--muted)">Cuando pasen las cuotas que faltan te quedarían <b style="color:' + (quedaTrasFijos < 0 ? "var(--expense)" : "var(--ink)") + '">' + eur(quedaTrasFijos) + '</b></div>'
+        : '') +
+      listaPend + '</div>';
+  }
+
+  function openFijosSheet() {
+    var sheet = document.getElementById("sheet");
+    var est = estadoFijos();
+    var filas = fijos.length === 0
+      ? '<div class="empty" style="padding:22px 6px"><div class="big">📌</div>' +
+        '<p>Aún no has apuntado ninguna cuota fija.</p>' +
+        '<p class="hint">Apunta lo que te cobran todos los meses: Netflix, gimnasio, préstamo, teléfono…</p></div>'
+      : fijos.map(function (f) {
+          var c = cat(f.categoryId);
+          return '<div class="item" data-fijo-id="' + esc(f.id) + '"' + (f.activo ? '' : ' style="opacity:.5"') + '>' +
+            '<div class="ico" style="background:' + c.color + '22">' + c.emoji + '</div>' +
+            '<div class="mid"><div class="t">' + esc(f.concepto || c.label) + '</div>' +
+            '<div class="s">' + esc(c.label) + (f.dia ? ' · día ' + f.dia : '') + (f.cuenta ? ' · ' + esc(f.cuenta) : '') + (f.activo ? '' : ' · en pausa') + '</div></div>' +
+            '<div class="amt">' + eur(f.amount) + '</div>' +
+            '<button class="item-del" data-del-fijo="' + esc(f.id) + '" aria-label="Borrar">🗑</button></div>';
+        }).join("");
+
+    sheet.innerHTML =
+      '<div class="grab"></div>' +
+      '<h2>Mis gastos fijos</h2>' +
+      '<div class="cat-hint">Esto <b>no crea ningún gasto</b>: los movimientos siguen viniendo del banco. Sirve para saber cuánto del mes ya está comprometido en cuotas y cuánto te queda de verdad.</div>' +
+      (fijos.length ? '<div class="rev-count">Total al mes: <b>' + eur(est.total) + '</b></div>' : '') +
+      '<div id="fijosList">' + filas + '</div>' +
+      '<div class="edit-hint" style="margin-top:10px">✎ Toca una cuota para editarla</div>' +
+      '<div class="sheet-actions"><button class="btn save-btn" id="addFijoBtn" style="flex:1">+ Añadir cuota fija</button></div>';
+    document.getElementById("modal").classList.remove("hidden");
+
+    document.getElementById("addFijoBtn").addEventListener("click", function () { openFijoModal({}); });
+    document.getElementById("fijosList").addEventListener("click", function (ev) {
+      var del = ev.target.closest("[data-del-fijo]");
+      if (del) {
+        ev.stopPropagation();
+        var idDel = del.getAttribute("data-del-fijo");
+        var f = fijos.find(function (x) { return x.id === idDel; });
+        if (!window.confirm("¿Borrar la cuota \"" + (f ? (f.concepto || eur(f.amount)) : "") + "\"?")) return;
+        fijos = fijos.filter(function (x) { return x.id !== idDel; });
+        openFijosSheet(); render();
+        deleteFijo(idDel).then(function (ok) {
+          if (ok) { toast("Cuota borrada"); return; }
+          if (f) fijos.push(f);
+          openFijosSheet(); render();
+          avisoFallo("borrar la cuota");
+        });
+        return;
+      }
+      var it = ev.target.closest("[data-fijo-id]");
+      if (!it) return;
+      var f2 = fijos.find(function (x) { return x.id === it.getAttribute("data-fijo-id"); });
+      if (f2) openFijoModal(f2);
+    });
+  }
+
+  function openFijoModal(f) {
+    var editando = !!f.id;
+    var sheet = document.getElementById("sheet");
+    sheet.innerHTML =
+      '<div class="grab"></div>' +
+      '<h2>' + (editando ? "Editar cuota fija" : "Nueva cuota fija") + '</h2>' +
+      '<div class="field"><label>Concepto</label>' +
+      '<input id="fjConcepto" class="txt-input" type="text" placeholder="p. ej. Netflix" value="' + esc(f.concepto || "") + '"></div>' +
+      '<div class="field"><label>Importe al mes</label>' +
+      '<div class="amount-input"><span>€</span><input id="fjAmount" type="text" inputmode="decimal" placeholder="0,00" value="' + esc(f.amount != null ? String(f.amount).replace(".", ",") : "") + '"></div></div>' +
+      '<div class="field"><label>Categoría</label>' +
+      '<select id="fjCat" class="txt-input">' + catOptions(f.categoryId || "suscripciones") + '</select></div>' +
+      '<div class="field"><label>Día del mes <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>' +
+      '<input id="fjDia" class="txt-input" type="number" min="1" max="31" placeholder="p. ej. 3" value="' + esc(f.dia != null ? String(f.dia) : "") + '"></div>' +
+      ((perfil.cuentas && perfil.cuentas.length)
+        ? '<div class="field"><label>Cuenta</label><select id="fjCuenta" class="txt-input">' + cuentaOptions(f.cuenta || "") + '</select></div>'
+        : '') +
+      '<div class="field"><label style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:13.5px;color:var(--ink)">' +
+      '<input id="fjActivo" type="checkbox" style="width:18px;height:18px;accent-color:var(--primary)"' + (f.activo === false ? '' : ' checked') + '> Contar esta cuota en la previsión</label></div>' +
+      '<div class="sheet-actions">' +
+      '<button class="btn btn-ghost" id="fjBackBtn" style="flex:0 0 54px">‹</button>' +
+      '<button class="btn save-btn" id="fjSaveBtn">' + (editando ? "Guardar cambios" : "Guardar cuota") + '</button>' +
+      '</div>';
+    document.getElementById("modal").classList.remove("hidden");
+
+    document.getElementById("fjBackBtn").addEventListener("click", openFijosSheet);
+
+    document.getElementById("fjSaveBtn").addEventListener("click", function () {
+      var amt = parseAmount(document.getElementById("fjAmount").value);
+      if (isNaN(amt) || amt <= 0) { toast("Pon un importe válido"); document.getElementById("fjAmount").focus(); return; }
+      var diaTxt = document.getElementById("fjDia").value;
+      var dia = diaTxt === "" ? null : Math.min(31, Math.max(1, parseInt(diaTxt, 10) || 1));
+      var selCu = document.getElementById("fjCuenta");
+      var nuevo = {
+        id: f.id || uid(),
+        concepto: document.getElementById("fjConcepto").value.trim(),
+        amount: amt,
+        categoryId: document.getElementById("fjCat").value,
+        dia: dia,
+        cuenta: selCu ? selCu.value : (f.cuenta || ""),
+        activo: document.getElementById("fjActivo").checked
+      };
+      var copiaAnterior = editando ? fijos.find(function (x) { return x.id === f.id; }) : null;
+      var antes = copiaAnterior ? JSON.parse(JSON.stringify(copiaAnterior)) : null;
+      if (editando) {
+        fijos = fijos.map(function (x) { return x.id === nuevo.id ? nuevo : x; });
+      } else {
+        fijos.push(nuevo);
+      }
+      openFijosSheet(); render();
+      saveFijo(nuevo).then(function (ok) {
+        if (ok) { toast(editando ? "Cuota actualizada ✓" : "Cuota guardada ✓"); return; }
+        if (editando && antes) fijos = fijos.map(function (x) { return x.id === antes.id ? antes : x; });
+        else fijos = fijos.filter(function (x) { return x.id !== nuevo.id; });
+        openFijosSheet(); render();
+        avisoFallo("guardar la cuota");
+      });
+    });
+
+    setTimeout(function () { var c = document.getElementById("fjConcepto"); if (c && !editando) c.focus(); }, 250);
+  }
+
+  // ---------- Presupuestos por categoría ----------
+  function gastadoPorCategoria() {
+    var m = {};
+    monthGastos().forEach(function (e) { m[e.categoryId] = (m[e.categoryId] || 0) + (e.amount || 0); });
+    return m;
+  }
+
+  // Tarjeta que se pinta en Resumen. Muestra TODAS las categorías con límite,
+  // incluidas las que aún no tienen gasto este mes.
+  function tarjetaPresupuestos() {
+    var ids = Object.keys(presupuestos);
+    if (ids.length === 0) return "";
+    var gastado = gastadoPorCategoria();
+    var totalLim = 0, totalGas = 0, nPasados = 0;
+
+    var filas = ids.map(function (id) {
+      var c = cat(id), lim = presupuestos[id], gas = gastado[id] || 0;
+      totalLim += lim; totalGas += gas;
+      var pct = lim > 0 ? (gas / lim * 100) : 0;
+      var pasado = gas > lim;
+      if (pasado) nPasados++;
+      var color = pasado ? "var(--expense)" : (pct >= 80 ? "#D97706" : "var(--income)");
+      return { pct: pct, html:
+        '<div style="margin-bottom:13px">' +
+        '<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:5px">' +
+        '<span style="font-size:15px">' + c.emoji + '</span>' +
+        '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.label) + '</span>' +
+        '<span style="font-variant-numeric:tabular-nums;font-weight:600;color:' + color + '">' + eurShort(gas) + '</span>' +
+        '<span style="font-size:11.5px;color:var(--faint)">de ' + eurShort(lim) + '</span></div>' +
+        '<div class="catbar-track"><div class="catbar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%;background:' + color + '"></div></div>' +
+        (pasado ? '<div style="font-size:11.5px;color:var(--expense);margin-top:4px">Te has pasado ' + eur(gas - lim) + '</div>' : '') +
+        '</div>' };
+    }).sort(function (a, b) { return b.pct - a.pct; }).map(function (x) { return x.html; }).join("");
+
+    return '<div class="card"><h3>🎯 Presupuestos ' +
+      '<span style="font-size:11px;font-weight:400;color:var(--faint);font-family:\'Hanken Grotesk\',sans-serif">· ' + eurShort(totalGas) + ' de ' + eurShort(totalLim) + '</span></h3>' +
+      filas +
+      (nPasados > 0
+        ? '<div style="font-size:12.5px;color:var(--expense);border-top:1px solid var(--line);padding-top:9px">⚠ Te has pasado en ' + nPasados + (nPasados === 1 ? " categoría" : " categorías") + '</div>'
+        : '') +
+      '</div>';
+  }
+
+  function openPresupuestosSheet() {
+    var sheet = document.getElementById("sheet");
+    var gastado = gastadoPorCategoria();
+
+    var filas = CATS.filter(function (c) { return c.id !== "sin_clasificar"; }).map(function (c) {
+      var lim = presupuestos[c.id];
+      return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)">' +
+        '<span style="font-size:16px;width:24px;text-align:center;flex-shrink:0">' + c.emoji + '</span>' +
+        '<span style="flex:1;min-width:0;font-size:13px">' + esc(c.label) +
+        '<br><span style="font-size:11px;color:var(--faint)">este mes: ' + eurShort(gastado[c.id] || 0) + '</span></span>' +
+        '<input class="presup-in" data-cat="' + c.id + '" type="text" inputmode="decimal" placeholder="—" ' +
+        'value="' + (lim != null ? esc(String(lim).replace(".", ",")) : "") + '" ' +
+        'style="width:86px;flex-shrink:0;border:1.5px solid var(--line);border-radius:9px;padding:9px;text-align:right;font-family:\'Hanken Grotesk\';font-size:13.5px;outline:none">' +
+        '</div>';
+    }).join("");
+
+    sheet.innerHTML =
+      '<div class="grab"></div>' +
+      '<h2>Presupuestos</h2>' +
+      '<div class="cat-hint">Pon un límite al mes en las categorías que quieras vigilar. En el <b>Resumen</b> verás una barra con lo que llevas y te avisará si te pasas. Deja vacías las que no te interesen.</div>' +
+      '<div>' + filas + '</div>' +
+      '<div class="sheet-actions"><button class="btn save-btn" id="presupSaveBtn" style="flex:1">Guardar presupuestos</button></div>';
+    document.getElementById("modal").classList.remove("hidden");
+
+    document.getElementById("presupSaveBtn").addEventListener("click", function () {
+      var btn = this;
+      var antes = {};
+      Object.keys(presupuestos).forEach(function (k) { antes[k] = presupuestos[k]; });
+
+      var nuevos = {};
+      Array.prototype.forEach.call(document.querySelectorAll(".presup-in"), function (inp) {
+        var v = parseAmount(inp.value);
+        if (!isNaN(v) && v > 0) nuevos[inp.getAttribute("data-cat")] = v;
+      });
+
+      // Guardar los que cambian y borrar los que se han dejado vacíos
+      var tareas = [];
+      CATS.forEach(function (c) {
+        var a = antes[c.id], b = nuevos[c.id];
+        if (b != null && b !== a) tareas.push(savePresupuesto(c.id, b));
+        else if (b == null && a != null) tareas.push(deletePresupuesto(c.id));
+      });
+      if (tareas.length === 0) { closeModal(); return; }
+
+      presupuestos = nuevos;
+      btn.disabled = true;
+      Promise.all(tareas).then(function (res) {
+        btn.disabled = false;
+        if (res.every(function (r) { return r; })) { closeModal(); render(); toast("Presupuestos guardados ✓"); return; }
+        presupuestos = antes;
+        render();
+        avisoFallo("guardar los presupuestos");
+      });
+    });
+  }
+
   // ---------- Cuenta / cerrar sesión ----------
   function openAccountSheet() {
     var sheet = document.getElementById("sheet");
@@ -1461,6 +1842,10 @@ body { background: #FFFFFF; }
 
       '<div class="field"><label>Ciudad <span style="font-weight:400;text-transform:none;letter-spacing:0">(sale en la cabecera)</span></label>' +
       '<input id="pCiudad" class="txt-input" type="text" placeholder="p. ej. Aalsmeer" value="' + esc(perfil.ciudad) + '"></div>' +
+
+      '<div class="field"><label>Mis cuentas <span style="font-weight:400;text-transform:none;letter-spacing:0">(separadas por comas)</span></label>' +
+      '<input id="pCuentas" class="txt-input" type="text" placeholder="p. ej. Santander, Efectivo" value="' + esc((perfil.cuentas || []).join(", ")) + '">' +
+      '<div style="font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.4">Si pones alguna, al añadir un gasto podrás elegir de qué cuenta sale. Déjalo vacío si no lo necesitas.</div></div>' +
 
       '<div class="cat-hint">Si te has mudado y quieres comparar el antes y el después, pon aquí el nombre del sitio y la fecha. La pestaña <b>Evolución</b> separará las dos etapas. Si lo dejas vacío, verás simplemente todos los meses seguidos.</div>' +
 
@@ -1478,9 +1863,13 @@ body { background: #FFFFFF; }
       var nuevo = {
         ciudad: document.getElementById("pCiudad").value.trim(),
         etapaNombre: document.getElementById("pEtapaNombre").value.trim(),
-        etapaInicio: document.getElementById("pEtapaInicio").value || null
+        etapaInicio: document.getElementById("pEtapaInicio").value || null,
+        // Se limpian espacios y vacíos, y se quitan repetidas
+        cuentas: document.getElementById("pCuentas").value.split(",")
+          .map(function (c) { return c.trim(); })
+          .filter(function (c, i, arr) { return c && arr.indexOf(c) === i; })
       };
-      var antes = { ciudad: perfil.ciudad, etapaNombre: perfil.etapaNombre, etapaInicio: perfil.etapaInicio };
+      var antes = { ciudad: perfil.ciudad, etapaNombre: perfil.etapaNombre, etapaInicio: perfil.etapaInicio, cuentas: perfil.cuentas };
       btn.disabled = true;
       perfil = nuevo;
       savePerfil(nuevo).then(function (ok) {
@@ -1527,11 +1916,21 @@ body { background: #FFFFFF; }
     }).join("");
   }
 
+  // Opciones del selector de cuenta, a partir de la lista del perfil
+  function cuentaOptions(selected) {
+    var html = '<option value="">(sin especificar)</option>';
+    (perfil.cuentas || []).forEach(function (c) {
+      html += '<option value="' + esc(c) + '"' + (c === selected ? " selected" : "") + '>' + esc(c) + '</option>';
+    });
+    return html;
+  }
+
   function openModal(opts) {
     opts = opts || {};
     editingId = opts.id || null;
     formCat = opts.categoryId || "super";
     formKind = opts.kind || "gasto";
+    formCuenta = opts.cuenta || "";
     var amount = opts.amount != null ? String(opts.amount).replace(".", ",") : "";
     var date = opts.date || todayISO();
     var note = opts.note || "";
@@ -1553,6 +1952,10 @@ body { background: #FFFFFF; }
       '<div class="field" id="catField"' + (esIngreso ? ' style="display:none"' : '') + '><label>Categoría</label><div class="cat-grid" id="catGrid">' + catGrid(formCat) + '</div></div>' +
       '<div class="field"><label>Concepto (opcional)</label><input id="fNote" class="txt-input" type="text" placeholder="' + (esIngreso ? "p. ej. Sueldo" : "p. ej. Compra del súper") + '" value="' + esc(note) + '"></div>' +
       '<div class="field"><label>Fecha</label><input id="fDate" class="date-input" type="date" value="' + esc(date) + '"></div>' +
+      // El selector de cuenta solo aparece si el usuario ha definido cuentas en Mi cuenta
+      ((perfil.cuentas && perfil.cuentas.length)
+        ? '<div class="field"><label>Cuenta</label><select id="fCuenta" class="txt-input">' + cuentaOptions(formCuenta) + '</select></div>'
+        : '') +
       '<div class="sheet-actions">' +
       (editingId ? '<button class="btn del-btn" id="delBtn">🗑</button>' : "") +
       '<button class="btn save-btn" id="saveBtn">' + (editingId ? "Guardar cambios" : "Guardar") + '</button>' +
@@ -1610,6 +2013,8 @@ body { background: #FFFFFF; }
     }
     var note = document.getElementById("fNote").value.trim();
     var date = document.getElementById("fDate").value || todayISO();
+    var selCuenta = document.getElementById("fCuenta");
+    var cuenta = selCuenta ? selCuenta.value : formCuenta;
     var esIngreso = formKind === "ingreso";
     var catFinal = esIngreso ? "otros" : formCat; // los ingresos no usan categoría de gasto
     var palabra = esIngreso ? "Ingreso" : "Gasto";
@@ -1618,18 +2023,18 @@ body { background: #FFFFFF; }
       var ex = expenses.find(function (x) { return x.id === editingId; });
       if (ex) {
         // Se guarda el estado anterior para poder deshacerlo si Supabase lo rechaza
-        var antes = { amount: ex.amount, categoryId: ex.categoryId, note: ex.note, date: ex.date, kind: ex.kind };
-        ex.amount = amt; ex.categoryId = catFinal; ex.note = note; ex.date = date; ex.kind = formKind;
+        var antes = { amount: ex.amount, categoryId: ex.categoryId, note: ex.note, date: ex.date, kind: ex.kind, cuenta: ex.cuenta };
+        ex.amount = amt; ex.categoryId = catFinal; ex.note = note; ex.date = date; ex.kind = formKind; ex.cuenta = cuenta;
         saveExpense(ex).then(function (ok) {
           if (ok) { toast(palabra + " actualizado ✓"); return; }
           ex.amount = antes.amount; ex.categoryId = antes.categoryId;
-          ex.note = antes.note; ex.date = antes.date; ex.kind = antes.kind;
+          ex.note = antes.note; ex.date = antes.date; ex.kind = antes.kind; ex.cuenta = antes.cuenta;
           render();
           avisoFallo("guardar el cambio");
         });
       }
     } else {
-      var newExp = { id: uid(), amount: amt, categoryId: catFinal, note: note, date: date, kind: formKind, createdAt: Date.now() };
+      var newExp = { id: uid(), amount: amt, categoryId: catFinal, note: note, date: date, kind: formKind, cuenta: cuenta, createdAt: Date.now() };
       expenses.push(newExp);
       saveExpense(newExp).then(function (ok) {
         if (ok) { toast(palabra + " guardado ✓"); return; }
@@ -1808,7 +2213,7 @@ body { background: #FFFFFF; }
         id: uid(), amount: amt,
         categoryId: esIngreso ? "otros" : (catSel ? catSel.value : "sin_clasificar"),
         note: row.querySelector('[data-f="note"]').value.trim(),
-        date: dt, kind: esIngreso ? "ingreso" : "gasto", createdAt: Date.now()
+        date: dt, kind: esIngreso ? "ingreso" : "gasto", cuenta: cuentaLote, createdAt: Date.now()
       };
       expenses.push(exp);
       toSave.push(exp);
@@ -1876,17 +2281,23 @@ body { background: #FFFFFF; }
       '<div class="grab"></div>' +
       '<h2>Pegar movimientos</h2>' +
       '<div class="cat-hint">Pega aquí el listado que te paso en el chat (un gasto por línea) y pulsa Procesar. Podrás revisar todo antes de guardar.</div>' +
+      // Como un extracto es siempre de un banco, se elige una vez para todo el lote
+      ((perfil.cuentas && perfil.cuentas.length)
+        ? '<div class="field"><label>¿De qué cuenta es este extracto?</label><select id="pasteCuenta" class="txt-input">' + cuentaOptions("") + '</select></div>'
+        : '') +
       '<textarea id="pasteArea" class="txt-input" style="min-height:150px;font-family:monospace;font-size:12.5px;resize:vertical" placeholder="2026-06-04;super;23,40;Albert Heijn&#10;2026-06-03;comer;12,50;Bar Lola"></textarea>' +
       '<div id="pasteErr" class="note-err" style="margin-top:8px;display:none">No reconocí ningún gasto. Revisa el texto.</div>' +
       '<div class="sheet-actions"><button class="btn save-btn" id="procPaste">Procesar</button></div>';
     document.getElementById("modal").classList.remove("hidden");
     document.getElementById("procPaste").addEventListener("click", function () {
       var txt = document.getElementById("pasteArea").value;
+      var selC = document.getElementById("pasteCuenta");
+      cuentaLote = selC ? selC.value : "";
       var list = parsePasted(txt);
       if (list.length === 0) { document.getElementById("pasteErr").style.display = "block"; return; }
       if (list.length === 1) {
         var x = list[0];
-        openModal({ amount: x.amount, date: x.date, note: x.note, categoryId: x.categoryId, kind: x.kind,
+        openModal({ amount: x.amount, date: x.date, note: x.note, categoryId: x.categoryId, kind: x.kind, cuenta: cuentaLote,
           statusHTML: '<div class="scan-status" style="background:var(--income-soft);color:#15803D"><div>✓ Revisa y guarda.</div></div>' });
       } else {
         openMultiReview(list);
@@ -1898,10 +2309,10 @@ body { background: #FFFFFF; }
   // ---------- CSV export ----------
   function exportCSV() {
     if (expenses.length === 0) { toast("No hay nada que exportar"); return; }
-    var rows = [["Fecha", "Tipo_mov", "Categoria", "Tipo", "Concepto", "Importe_EUR"]];
+    var rows = [["Fecha", "Tipo_mov", "Categoria", "Tipo", "Cuenta", "Concepto", "Importe_EUR"]];
     expenses.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
       var c = cat(e.categoryId);
-      rows.push([e.date, (e.kind === "ingreso" ? "ingreso" : "gasto"), c.label, c.type, (e.note || "").replace(/"/g, "'"), String(e.amount).replace(".", ",")]);
+      rows.push([e.date, (e.kind === "ingreso" ? "ingreso" : "gasto"), c.label, c.type, (e.cuenta || ""), (e.note || "").replace(/"/g, "'"), String(e.amount).replace(".", ",")]);
     });
     var csv = rows.map(function (r) {
       return r.map(function (cell) { return '"' + cell + '"'; }).join(";");
@@ -1945,6 +2356,8 @@ body { background: #FFFFFF; }
     document.getElementById("accountBtn").addEventListener("click", openAccountSheet);
     document.getElementById("addBtn").addEventListener("click", function () { openModal({}); });
     document.getElementById("pasteBtn").addEventListener("click", openPasteSheet);
+    document.getElementById("fijosBtn").addEventListener("click", openFijosSheet);
+    document.getElementById("presupBtn").addEventListener("click", openPresupuestosSheet);
     document.getElementById("scrim").addEventListener("click", closeModal);
     document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
     // Detalle de día (Calendario): tocar un movimiento lo abre para editar. Un único escuchador, no se acumula.
@@ -1952,7 +2365,7 @@ body { background: #FFFFFF; }
       var it = ev.target.closest(".item");
       if (!it) return;
       var e = expenses.find(function (x) { return x.id === it.getAttribute("data-id"); });
-      if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind });
+      if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta });
     });
     document.getElementById("exportBtn").addEventListener("click", exportCSV);
     document.getElementById("exportBtn2").addEventListener("click", exportCSV);
@@ -2053,7 +2466,7 @@ body { background: #FFFFFF; }
       if (ci) {
         var id = ci.getAttribute("data-id");
         var e = expenses.find(function (x) { return x.id === id; });
-        if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind });
+        if (e) openModal({ id: e.id, amount: e.amount, categoryId: e.categoryId, note: e.note, date: e.date, kind: e.kind, cuenta: e.cuenta });
         return;
       }
       // Editar desde la lista de movimientos
@@ -2061,7 +2474,7 @@ body { background: #FFFFFF; }
       if (!it) return;
       var id2 = it.getAttribute("data-id");
       var e2 = expenses.find(function (x) { return x.id === id2; });
-      if (e2) openModal({ id: e2.id, amount: e2.amount, categoryId: e2.categoryId, note: e2.note, date: e2.date, kind: e2.kind });
+      if (e2) openModal({ id: e2.id, amount: e2.amount, categoryId: e2.categoryId, note: e2.note, date: e2.date, kind: e2.kind, cuenta: e2.cuenta });
     });
   }
 

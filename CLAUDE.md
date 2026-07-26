@@ -71,9 +71,34 @@ user_id       uuid        primary key references auth.users(id) on delete cascad
 ciudad        text        not null default ''      -- sale en el subtítulo de la cabecera
 etapa_nombre  text        not null default ''      -- p. ej. "Holanda"
 etapa_inicio  date                                 -- null = sin etapa configurada
+cuentas       text[]      not null default '{}'    -- sus bancos, p. ej. {Santander,"Trade Republic"}
 created_at    timestamptz not null default now()
 updated_at    timestamptz not null default now()
 ```
+
+**`fijos`** — cuotas mensuales, **solo para previsión** (no generan movimientos):
+```sql
+id          text        primary key
+user_id     uuid        not null default auth.uid()
+concepto    text        not null default ''
+amount      float8      not null
+category_id text        not null default 'otros'
+dia         int                                    -- día del mes en que suele cobrarse (opcional)
+cuenta      text        not null default ''
+activo      boolean     not null default true      -- false = no cuenta en la previsión
+created_at  timestamptz not null default now()
+```
+
+**`presupuestos`** — límite mensual por categoría:
+```sql
+user_id     uuid        not null default auth.uid()
+category_id text        not null
+importe     float8      not null
+updated_at  timestamptz not null default now()
+primary key (user_id, category_id)
+```
+
+La tabla `gastos` tiene además `cuenta text not null default ''` (de qué banco sale el movimiento).
 
 Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delete). **Ojo con la forma de escribirlas:** usan `(select auth.uid()) = user_id`, no `auth.uid() = user_id`. El `select` hace que Postgres lo evalúe una vez por consulta en vez de una vez por fila; sin él, el auditor de rendimiento de Supabase da 8 avisos. La condición es idéntica.
 
@@ -89,11 +114,18 @@ Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delet
 - Fuentes: Fraunces (serif, títulos y números) + Hanken Grotesk (sans, resto).
 - Versión de ordenador: media query `@media (min-width: 920px)` con layout de dos columnas. El móvil no cambia.
 
+### Gastos fijos = PREVISIÓN, nunca movimientos — DECISIÓN IMPORTANTE
+Los "gastos fijos" (tabla `fijos`, botón *Mis gastos fijos*) **no crean movimientos ni suman en los totales**. Se decidió así el 26 jul 2026 por un motivo concreto: Alberto mete sus datos desde los extractos del banco, y en el extracto **ya vienen** Netflix, Basic-Fit, Cetelem… Si la app los generase por su cuenta, se contarían dos veces (el antiduplicados solo los pillaría si coincidieran en día e importe exactos, y el cobro real no siempre cae el mismo día).
+
+Lo que hacen es responder a «¿cuánto de este mes ya está comprometido?». La función `estadoFijos()` empareja cada cuota con un movimiento real del mes **por importe** (tolerancia de medio céntimo) y va *consumiendo* cada movimiento, para que dos cuotas del mismo importe no se emparejen con el mismo cargo. La tarjeta del Resumen muestra total / ya pasaron / pendiente, y cuánto quedaría cuando pasen las que faltan.
+
+**No cambiar esto a "generar movimientos" sin hablarlo con Alberto.**
+
 ### Pestañas de la app
 Resumen · Movimientos · Calendario · Evolución · Deudas
 
 - **Resumen:** donut + desglose por categoría (solo gastos, no ingresos).
-- **Movimientos:** lista cronológica, con botón de borrado rápido por fila.
+- **Movimientos:** lista cronológica, con botón de borrado rápido por fila y **buscador**. Con el buscador vacío se ve el mes que estás viendo; en cuanto escribes algo busca en **todos los meses** (por concepto, categoría, cuenta e importe, ignorando acentos: "cafe" encuentra "café"). Al escribir solo se repinta la lista, no la caja, para no perder el foco.
 - **Calendario:** cuadrícula del mes con gasto (rojo) e ingreso (verde) bajo cada día; tocar un día abre el detalle.
 - **Evolución:** comparación mes a mes. Si el usuario ha configurado una *etapa* en su perfil (nombre + fecha de inicio), separa lo de antes y lo de después; si no la ha configurado, muestra simplemente todos los meses seguidos. **Ya no hay fechas ni ciudades fijas en el código** (antes había una constante con la fecha de mudanza de Alberto, y sus amigos veían textos que no iban con ellos).
 - **Deudas:** balance de lo que le deben y lo que debe, con botón de liquidar (✓) sin borrar el histórico.
@@ -114,7 +146,7 @@ El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v13`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v14`**.
 - **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
 - **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
@@ -219,4 +251,11 @@ Auditoría del código y arreglo de todo lo roto. Alberto confirmó que la app e
 - **Colores del manifest corregidos**: eran de la paleta verde antigua, así que la pantalla de carga salía verde y luego saltaba a blanco.
 - Todo verificado con una prueba de integración (Supabase falseado) que recorre las 5 pestañas, los guardados que fallan y el pegado de movimientos.
 
-**Pendiente para la Fase 2** (por orden de valor): gastos recurrentes · campo de cuenta/banco (ya tiene dos) · presupuesto por categoría · buscador en Movimientos · enlazar Deudas con movimientos · gestionar categorías desde la app · importar CSV · modo oscuro. **Nota:** las etiquetas de algunas categorías siguen siendo personales de Alberto (p. ej. «Valencia y pareja»); se resolverá cuando se puedan gestionar desde la app.
+#### Fase 2 de mejoras (26 jul 2026) — caché `v14`
+Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue igual.
+- **Cuenta / banco en cada movimiento.** Cada usuario define sus cuentas en *Mi cuenta* (campo `perfiles.cuentas`); si no define ninguna, el selector no aparece y la app se comporta como antes. Al pegar un extracto se elige la cuenta **una vez para todo el lote** (un extracto es siempre de un banco). Sale también en el CSV. Los 338 movimientos que ya existían se rellenaron: 316 Santander y 22 Trade Republic, deducido de qué extracto vino cada uno.
+- **Gastos fijos (previsión).** Ver la sección «Gastos fijos = PREVISIÓN».
+- **Presupuesto por categoría.** Límite mensual, tarjeta en Resumen con barra por categoría (verde / ámbar al 80% / rojo al pasarse) y aviso de en cuántas te has pasado. Solo aparece si hay al menos un límite puesto.
+- **Buscador en Movimientos.** Ver la descripción en «Pestañas de la app».
+
+**Pendiente para la Fase 3** (por orden de valor): enlazar Deudas con movimientos · gestionar categorías desde la app · importar CSV · modo oscuro · cargar por rango de fechas en vez de todo el histórico (hoy `loadData()` trae todos los movimientos; con 338 va sobrado, con miles no). **Nota:** las etiquetas de algunas categorías siguen siendo personales de Alberto (p. ej. «Valencia y pareja»); se resolverá cuando se puedan gestionar desde la app.
