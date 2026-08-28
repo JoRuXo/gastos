@@ -232,6 +232,8 @@ Reglas:
 - **Excluir** además: retrocesiones, anulaciones (netear con su cargo gemelo), y Endesa + reembolsos de luz de la familia.
 - **Ingresos** → `kind='ingreso'` (la app los pone en `otros`). Sueldos y transferencias de familia = ingreso.
 - **Categorías:** respetar los criterios habituales de Alberto (algunos son discretos y NO se documentan aquí; ver nota de privacidad). Ante una categoría dudosa, dejarla en `sin_clasificar` o preguntar.
+- **Cruzar transferencias grandes a personas con la tabla `deudas` antes de darlas por gasto normal.** Un envío de dinero a alguien puede ser en realidad el abono de una deuda pendiente (`select * from deudas where user_id=... and settled=false`). Si coincide, no se mete como gasto: se resta del importe de la deuda (o se liquida si la cubre entera).
+- **Dinero movido a una cuenta externa que no está en `perfiles.cuentas`** (Alberto tiene alguna más, fuera de Santander/Trade Republic) puede ser: (a) dinero que sigue siendo suyo y solo cambia de sitio (colchón, pago futuro ya previsto) → se excluye igual que un traspaso interno, no es gasto; o (b) una inversión de verdad → sí es gasto, categoría `inversiones`. Preguntar cuál de las dos es si no está claro.
 - Al terminar, dar un resumen de lo insertado y avisar de los apuntes dudosos para que Alberto los confirme.
 
 ## Si la app deja de funcionar: Supabase se pausa solo
@@ -315,3 +317,7 @@ Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue 
 - Se corrigió que la pestaña **Evolución** seguía contando los movimientos reembolsables, que sí se excluían en el resto de la app.
 
 **Ideas para más adelante:** adjuntar foto del ticket a un movimiento (Alberto lo dejó aparcado el 26 jul 2026) · notificaciones reales al móvil con Web Push.
+
+### 28 ago 2026
+- **Nueva categoría `inversiones`** (📈, `#4E8FA8`), creada como categoría propia vía la tabla `categorias` (igual que si se creara desde la app). Ahí van las transferencias a sus brokers/inversión cuando el dinero sale de verdad de sus cuentas de banco. Alberto adelantó que más adelante añadirá un apartado propio de Inversiones con el detalle de dónde invierte y cómo lo diversifica.
+- **Import de agosto:** 114 movimientos nuevos (Santander + Trade Republic), con 3 correcciones tras revisión: (1) una transferencia a una persona resultó ser el abono de una deuda pendiente — se quitó de `gastos` y se restó de la `deuda` en vez de contarla como gasto; (2) dos traspasos a una cuenta externa (fuera de `perfiles.cuentas`) eran inversión real → categoría `inversiones`; (3) otro traspaso a esa misma cuenta externa era solo dinero aparcado para un pago futuro, no gasto → excluido, igual que un traspaso interno.
