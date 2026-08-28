@@ -546,6 +546,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 .cal-cell { aspect-ratio: 1 / 1.35; border-radius: 11px; background: var(--surface); border: 1.5px solid var(--line); padding: 6px 4px 5px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: .12s; overflow: hidden; }
 .cal-cell.empty { background: transparent; border: none; cursor: default; }
 .cal-cell.tiene { background: var(--expense-bg); border-color: var(--expense-border); }
+.cal-cell.positivo { background: var(--income-soft); border-color: var(--income-border); }
 .cal-cell:not(.empty):active { transform: scale(.94); }
 .cal-cell .cd { font-size: 13px; font-weight: 700; color: var(--ink); }
 .cal-cell .nums { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; }
@@ -1648,8 +1649,9 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
       var iso = monthKey(viewYear, viewMonth) + "-" + pad2(dia);
       var dd = porDia[dia];
       var esHoy = iso === hoy ? " hoy" : "";
-      var tiene = (dd && dd.g > 0) ? " tiene" : "";
-      html += '<div class="cal-cell' + esHoy + tiene + '" data-day="' + iso + '">' +
+      var positivo = (dd && dd.i > dd.g) ? " positivo" : "";
+      var tiene = (!positivo && dd && dd.g > 0) ? " tiene" : "";
+      html += '<div class="cal-cell' + esHoy + tiene + positivo + '" data-day="' + iso + '">' +
         '<span class="cd">' + dia + '</span>' +
         '<span class="nums">' +
         (dd && dd.g > 0 ? '<span class="cg">−' + Math.round(dd.g) + '</span>' : '') +
