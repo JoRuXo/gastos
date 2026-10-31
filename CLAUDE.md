@@ -107,15 +107,16 @@ emoji      text
 color      text
 oculta     boolean not null default false
 propia     boolean not null default false   -- true = la creó el usuario
-orden      int                              -- reservado, aún sin usar
+orden      int                              -- posición al reordenar con ▲▼ (Fase 4)
+updated_at timestamptz not null default now()
 primary key (user_id, cat_id)
 ```
 
 La tabla `gastos` tiene además:
 - `cuenta text not null default ''` — de qué banco sale el movimiento.
-- `reembolsable boolean` / `reembolsado boolean` — ver «Movimientos reembolsables».
+- `reembolsable boolean not null default false` / `reembolsado boolean not null default false` — ver «Movimientos reembolsables».
 
-Las tres tablas tienen RLS activado con 4 políticas (select/insert/update/delete). **Ojo con la forma de escribirlas:** usan `(select auth.uid()) = user_id`, no `auth.uid() = user_id`. El `select` hace que Postgres lo evalúe una vez por consulta en vez de una vez por fila; sin él, el auditor de rendimiento de Supabase da 8 avisos. La condición es idéntica.
+Las **seis** tablas (`gastos`, `deudas`, `perfiles`, `fijos`, `presupuestos`, `categorias`) tienen RLS activado con 4 políticas (select/insert/update/delete), con nombres en español (`ver propios gastos`, `crear propias deudas`, `editar propio perfil`, `borrar propios fijos`…). **Ojo con la forma de escribirlas:** usan `(select auth.uid()) = user_id`, no `auth.uid() = user_id`. El `select` hace que Postgres lo evalúe una vez por consulta en vez de una vez por fila; sin él, el auditor de rendimiento de Supabase da 8 avisos. La condición es idéntica.
 
 ### Las 18 categorías — IDs SAGRADOS, nunca cambiar
 `vivienda`, `suministros`, `super`, `comer`, `transporte`, `coche`, `viajes`, `salud`, `telefono`, `suscripciones`, `estudios`, `ropa`, `valencia`, `ocio`, `peluqueria`, `tramites`, `otros`, `sin_clasificar`
@@ -164,7 +165,7 @@ Resumen · Movimientos · Calendario · Evolución · Deudas
 
 - **Resumen:** donut + desglose por categoría (solo gastos, no ingresos).
 - **Movimientos:** lista cronológica, con botón de borrado rápido por fila y **buscador**. Con el buscador vacío se ve el mes que estás viendo; en cuanto escribes algo busca en **todos los meses** (por concepto, categoría, cuenta e importe, ignorando acentos: "cafe" encuentra "café"). Al escribir solo se repinta la lista, no la caja, para no perder el foco.
-- **Calendario:** cuadrícula del mes con gasto (rojo) e ingreso (verde) bajo cada día; tocar un día abre el detalle.
+- **Calendario:** cuadrícula del mes con gasto (rojo) e ingreso (verde) bajo cada día; tocar un día abre el detalle. **El fondo de la casilla** es verde (`.positivo`) si ese día los ingresos superan a los gastos, rojo (`.tiene`) si hay gasto y no lo superan los ingresos, y neutro si no hay movimientos.
 - **Evolución:** comparación mes a mes, más una tarjeta de **tendencia por categoría** (selector + barras por mes, media y comparación con el mes anterior). Al cambiar de categoría solo se repinta el gráfico. Si el usuario ha configurado una *etapa* en su perfil (nombre + fecha de inicio), separa lo de antes y lo de después; si no la ha configurado, muestra simplemente todos los meses seguidos. **Ya no hay fechas ni ciudades fijas en el código** (antes había una constante con la fecha de mudanza de Alberto, y sus amigos veían textos que no iban con ellos).
 - **Deudas:** balance de lo que le deben y lo que debe, con botón de liquidar (✓) sin borrar el histórico.
 
@@ -184,7 +185,7 @@ El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v16`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v17`**.
 - **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
 - **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
@@ -321,3 +322,9 @@ Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue 
 ### 28 ago 2026
 - **Nueva categoría `inversiones`** (📈, `#4E8FA8`), creada como categoría propia vía la tabla `categorias` (igual que si se creara desde la app). Ahí van las transferencias a sus brokers/inversión cuando el dinero sale de verdad de sus cuentas de banco. Alberto adelantó que más adelante añadirá un apartado propio de Inversiones con el detalle de dónde invierte y cómo lo diversifica.
 - **Import de agosto:** 114 movimientos nuevos (Santander + Trade Republic), con 3 correcciones tras revisión: (1) una transferencia a una persona resultó ser el abono de una deuda pendiente — se quitó de `gastos` y se restó de la `deuda` en vez de contarla como gasto; (2) dos traspasos a una cuenta externa (fuera de `perfiles.cuentas`) eran inversión real → categoría `inversiones`; (3) otro traspaso a esa misma cuenta externa era solo dinero aparcado para un pago futuro, no gasto → excluido, igual que un traspaso interno.
+- **Calendario con días en verde.** Si en un día los ingresos superan a los gastos, la casilla se pinta de verde (clase `.positivo`, usa `--income-soft` / `--income-border`). Antes cualquier día con algún gasto salía rojo, aunque ese día hubiera entrado un sueldo. Caché `v17`. Commit `11b9f30`.
+- **La carpeta local no tenía `.git`** (venía de un ZIP). Se inicializó y se enlazó con `origin` (`https://github.com/JoRuXo/gastos.git`). Ese commit salió con autor `JoRuXo` en vez de `Noel`; se dejó tal cual (corregirlo exigiría `push --force`). Los commits siguientes usan `Noel`.
+
+### 31 oct 2026
+- **Alberto pasa a trabajar con Axis** (su IA propia, en su ordenador) en vez de Claude Code. Se preparó un ZIP de traspaso con todo el contexto (ver `contexto/CONTEXTO-AXIS.md` dentro del ZIP). Este `CLAUDE.md` sigue siendo la fuente de verdad de las reglas del proyecto.
+- **Esquema de Supabase verificado en vivo** (31 oct 2026, solo metadatos): coincide con lo documentado salvo `categorias.updated_at` (faltaba aquí). Las 6 tablas tienen RLS y 4 políticas cada una; `gastos` y `deudas` **no** tienen clave foránea a `auth.users` (las otras cuatro sí); hay dos índices propios: `fijos_user_idx` y `gastos_reembolsables_idx` (parcial: solo reembolsables pendientes). No hay funciones ni triggers propios en `public`. En ese momento `deudas`, `fijos` y `presupuestos` estaban **vacías**.
