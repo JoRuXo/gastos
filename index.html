@@ -562,7 +562,7 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
   <div class="login-box">
     <div class="mark">🌷</div>
     <h2>Mis Gastos</h2>
-    <p>Introduce tus datos para entrar</p>
+    <p id="loginSub">Introduce tus datos para entrar</p>
     <div class="field">
       <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px;letter-spacing:.02em">EMAIL</label>
       <input id="loginEmail" class="txt-input" type="email" placeholder="tu@email.com" autocomplete="email">
@@ -573,7 +573,8 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     </div>
     <div class="login-err" id="loginErr">Email o contraseña incorrectos</div>
     <button class="login-btn" id="loginBtn">Entrar</button>
-    <button type="button" class="login-link" id="forgotBtn">¿Has olvidado la contraseña?</button>
+    <button type="button" class="login-link" id="modeBtn">¿No tienes cuenta? Crea una</button>
+    <button type="button" class="login-link" id="forgotBtn" style="margin-top:2px">¿Has olvidado la contraseña?</button>
     <div class="login-msg" id="loginMsg"></div>
   </div>
 </div>
@@ -875,22 +876,69 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
     var passEl  = document.getElementById("loginPass");
     var errEl   = document.getElementById("loginErr");
 
+    // ----- Entrar / Crear cuenta: la misma pantalla en dos modos -----
+    var registro = false;
+    var modeBtn = document.getElementById("modeBtn");
+    var subEl = document.getElementById("loginSub");
+    var msgEl = document.getElementById("loginMsg");
+    function aviso(txt) { msgEl.textContent = txt; msgEl.style.display = "block"; }
+    function cambiarModo(r) {
+      registro = r;
+      errEl.style.display = "none";
+      msgEl.style.display = "none";
+      btn.textContent = r ? "Crear cuenta" : "Entrar";
+      subEl.textContent = r ? "Crea tu cuenta con tu email" : "Introduce tus datos para entrar";
+      modeBtn.textContent = r ? "¿Ya tienes cuenta? Entra" : "¿No tienes cuenta? Crea una";
+      passEl.setAttribute("autocomplete", r ? "new-password" : "current-password");
+      passEl.placeholder = r ? "Mínimo 6 caracteres" : "••••••••";
+    }
+    modeBtn.addEventListener("click", function () { cambiarModo(!registro); });
+
+    function doRegistro(email, pass) {
+      function fallo(txt) { errEl.textContent = txt; errEl.style.display = "block"; btn.disabled = false; btn.textContent = "Crear cuenta"; }
+      if (pass.length < 6) { fallo("La contraseña necesita al menos 6 caracteres."); return; }
+      btn.disabled = true;
+      btn.textContent = "Creando…";
+      errEl.style.display = "none";
+      sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.origin + location.pathname } })
+        .then(function (res) {
+          if (res.error) {
+            fallo(/rate|limit/i.test(res.error.message || "") ? "Demasiados intentos. Prueba otra vez en un rato." : "No se pudo crear la cuenta. Revisa el email y la contraseña.");
+            return;
+          }
+          // Si Supabase ya devuelve sesión, onAuthStateChange entra solo.
+          if (res.data && res.data.session) return;
+          btn.disabled = false;
+          btn.textContent = "Crear cuenta";
+          // Con la confirmación por correo activada, un email ya registrado vuelve sin identidades.
+          if (res.data && res.data.user && res.data.user.identities && res.data.user.identities.length === 0) {
+            aviso("Ese email ya tiene cuenta. Pulsa «Entra» o «¿Has olvidado la contraseña?».");
+            return;
+          }
+          aviso("Te hemos enviado un correo a " + email + ". Abre el enlace para confirmar tu cuenta y vuelve aquí a entrar. Mira también en spam.");
+        })
+        .catch(function () { fallo("No se pudo crear la cuenta. Revisa la conexión."); });
+    }
+
     function doLogin() {
       var email = emailEl.value.trim();
       var pass  = passEl.value;
       if (!email || !pass) return;
+      if (registro) { doRegistro(email, pass); return; }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-sm" style="border-color:rgba(255,255,255,.35);border-top-color:#fff"></span> Entrando…';
       errEl.style.display = "none";
       sb.auth.signInWithPassword({ email: email, password: pass })
         .then(function(res) {
           if (res.error) {
+            errEl.textContent = /not confirmed/i.test(res.error.message || "") ? "Falta confirmar tu email: abre el enlace del correo que te enviamos." : "Email o contraseña incorrectos";
             errEl.style.display = "block";
             btn.disabled = false;
             btn.textContent = "Entrar";
           }
         })
         .catch(function() {
+          errEl.textContent = "Email o contraseña incorrectos";
           errEl.style.display = "block";
           btn.disabled = false;
           btn.textContent = "Entrar";
@@ -902,9 +950,6 @@ select.txt-input { -webkit-appearance: none; appearance: none; background: var(-
 
     // ----- He olvidado la contraseña -----
     var forgotBtn = document.getElementById("forgotBtn");
-    var msgEl = document.getElementById("loginMsg");
-    function aviso(txt) { msgEl.textContent = txt; msgEl.style.display = "block"; }
-
     forgotBtn.addEventListener("click", function () {
       var email = emailEl.value.trim();
       errEl.style.display = "none";

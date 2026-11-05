@@ -176,6 +176,11 @@ Si algún día se quiere recuperar, está en el historial de Git. La forma corre
 
 **Flujo real que usa Alberto:** o le manda el extracto a Claude en una sesión como esta y se lo mete directamente en Supabase (ver «Importar movimientos desde extractos»), o pega en el botón **"Pegar movimientos"** un listado en formato `fecha;categoriaId;importe;concepto;tipo` (vía `parsePasted()`).
 
+### Crear cuenta desde la app (desde el 5 nov 2026)
+El login tiene un enlace *«¿No tienes cuenta? Crea una»* que cambia la misma pantalla al modo registro (`sb.auth.signUp`, email + contraseña de 6+ caracteres). Antes no había registro y Alberto tenía que crear cada usuario a mano en Supabase.
+Se eligió la **opción A: registro abierto con confirmación por correo** (Alberto la prefirió a un código de invitación). Riesgos aceptados: cualquiera con el enlace puede crearse cuenta (gasta espacio de la base gratuita) y el plan gratuito manda pocos correos por hora (también afecta a recuperar contraseña).
+⚠️ Para que funcione, en Supabase (*Authentication*) debe estar activado el registro (**Allow new users to sign up**) y la URL `https://joruxo.github.io/gastos/` en *Redirect URLs*. Si se desactiva *Confirm email*, la cuenta entra directa sin correo. Si algún día hay abuso, el plan B es el código de invitación.
+
 ### Recuperar la contraseña
 El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.resetPasswordForEmail`. Al volver desde el enlace, Supabase lanza el evento `PASSWORD_RECOVERY` y la app muestra la pantalla `#recoveryScreen` para poner una nueva (`sb.auth.updateUser`). **No se deja entrar sin cambiarla**, porque si no el enlace del correo serviría para colarse.
 
@@ -185,7 +190,7 @@ El login tiene *"¿Has olvidado la contraseña?"*: manda un correo con `sb.auth.
 - **Borrar mes completo:** botón con doble confirmación, borra solo los movimientos del mes que se está viendo.
 - **Exportar CSV:** incluye columna de tipo (gasto/ingreso).
 - **Botón físico de cerrar (✕):** fijo en la esquina superior derecha de la pantalla, visible en cualquier ventana modal (pegar movimientos, escanear, deudas, cuenta...). Se añadió porque en Safari/iPhone el teclado a veces tapa toda la zona de fondo que se usaba para cerrar tocando fuera.
-- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v17`**.
+- **Service worker:** `sw.js`, estrategia *network-first* (intenta red primero, cae a caché si falla). Hay que **subir cache version** (`mis-gastos-vN`) cada vez que se despliega un cambio relevante, para forzar que los navegadores descarten la caché vieja. Versión actual: **`v18`**.
 - **Si un guardado falla, se deshace en pantalla.** Las funciones de `Storage` (`saveExpense`, `deleteExpense`, `saveDebt`…) devuelven `true`/`false` según si Supabase confirmó. **Quien las llama TIENE que revertir el cambio local cuando devuelvan `false`.** Antes no se hacía y la app mostraba movimientos que en realidad no se habían guardado: al recargar desaparecían. Si se añade una operación nueva, seguir el mismo patrón.
 - **Antiduplicados al pegar:** `marcarDuplicados()` compara fecha + importe **al céntimo** (tolerancia 0,005) y cuenta las repeticiones dentro del propio lote. Así, si un día hubo tres cafés de 0,50 € y solo uno está guardado, marca uno como duplicado y deja entrar los otros dos. La versión vieja usaba una tolerancia de 0,02 € (daba 4,99 y 5,00 por iguales) y marcaba como duplicado cualquier coincidencia.
 
@@ -328,3 +333,6 @@ Cuatro funciones nuevas. Ninguna toca el flujo de importar extractos, que sigue 
 ### 31 oct 2026
 - **Alberto pasa a trabajar con Axis** (su IA propia, en su ordenador) en vez de Claude Code. Se preparó un ZIP de traspaso con todo el contexto (ver `contexto/CONTEXTO-AXIS.md` dentro del ZIP). Este `CLAUDE.md` sigue siendo la fuente de verdad de las reglas del proyecto.
 - **Esquema de Supabase verificado en vivo** (31 oct 2026, solo metadatos): coincide con lo documentado salvo `categorias.updated_at` (faltaba aquí). Las 6 tablas tienen RLS y 4 políticas cada una; `gastos` y `deudas` **no** tienen clave foránea a `auth.users` (las otras cuatro sí); hay dos índices propios: `fijos_user_idx` y `gastos_reembolsables_idx` (parcial: solo reembolsables pendientes). No hay funciones ni triggers propios en `public`. En ese momento `deudas`, `fijos` y `presupuestos` estaban **vacías**.
+
+### 5 nov 2026
+- **Registro desde la app** (opción A, caché `v18`). Ver «Crear cuenta desde la app». También el login avisa con un mensaje propio si falta confirmar el email.
