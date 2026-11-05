@@ -3,3 +3,42 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 .DS_Store
+
+# Dependencias y entornos locales (no se versionan)
+node_modules/
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Secretos: claves, tokens y variables de entorno locales
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.secrets/
+credentials.json
+*.token
+
+# Logs y ficheros temporales
+*.log
+logs/
+tmp/
+*.tmp
+
+# Datos locales y volúmenes de Docker
+data/
+volumes/
+*.sqlite
+*.sqlite3
+*.db
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

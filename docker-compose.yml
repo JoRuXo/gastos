@@ -1,0 +1,7 @@
+services:
+  gastos:
+    build: .
+    container_name: mis-gastos
+    ports:
+      - "8080:80"
+    restart: unless-stopped
